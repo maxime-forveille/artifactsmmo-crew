@@ -5,19 +5,18 @@ import type { components } from "../client/schema.js";
 export type Cooldown = components["schemas"]["CooldownSchema"];
 
 /**
- * Milliseconds remaining until `cooldown` expires, relative to `now`.
- * Never negative: an already-expired cooldown resolves to 0.
+ * Milliseconds remaining until `expiresAt` (an ISO date-time string), relative to `now`.
+ * Never negative: an already-past timestamp resolves to 0.
  */
-export const msUntilCooldownEnds = (cooldown: Cooldown, now: Date = new Date()): number => {
-  const expiresAt = parseISO(cooldown.expiration);
-  const remainingMs = differenceInMilliseconds(expiresAt, now);
+export const msUntilExpiration = (expiresAt: string, now: Date = new Date()): number => {
+  const remainingMs = differenceInMilliseconds(parseISO(expiresAt), now);
 
   return Math.max(0, remainingMs);
 };
 
-/** Resolves once `cooldown` has expired. Resolves immediately if it already has. */
-export const waitForCooldown = async (cooldown: Cooldown): Promise<void> => {
-  const delayMs = msUntilCooldownEnds(cooldown);
+/** Resolves once `expiresAt` has passed. Resolves immediately if it already has. */
+export const waitUntil = async (expiresAt: string): Promise<void> => {
+  const delayMs = msUntilExpiration(expiresAt);
 
   if (delayMs === 0) {
     return;

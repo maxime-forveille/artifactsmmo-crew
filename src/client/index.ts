@@ -4,6 +4,7 @@ import { err, ok, ResultAsync } from "neverthrow";
 import { env } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
 import { API_BASE_URL } from "./constants.js";
+import { createRateLimiter } from "./rateLimiter.js";
 import type { components, paths } from "./schema.js";
 
 export class ArtifactsApiError extends Error {
@@ -57,6 +58,28 @@ const authMiddleware = (token: string): Middleware => ({
   },
 });
 
+// Per https://docs.artifactsmmo.com/api_guide/rate_limits: the `action`
+// bucket (every POST /my/{name}/action/...) is capped at 10/s, 100/min and
+// 5000/hour, shared across the whole account/IP (i.e. across all 5
+// characters), separately from each character's own cooldown.
+const actionRateLimitMiddleware = (): Middleware => {
+  const limiter = createRateLimiter([
+    { limit: 10, windowMs: 1_000 },
+    { limit: 100, windowMs: 60_000 },
+    { limit: 5_000, windowMs: 3_600_000 },
+  ]);
+
+  return {
+    async onRequest({ request }) {
+      if (new URL(request.url).pathname.includes("/action/")) {
+        await limiter.acquire();
+      }
+
+      return request;
+    },
+  };
+};
+
 /**
  * Thin, fully-typed wrapper around the Artifacts MMO REST API.
  *
@@ -68,6 +91,7 @@ const authMiddleware = (token: string): Middleware => ({
 export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
   const client = createClient<paths>({ baseUrl: API_BASE_URL });
   client.use(authMiddleware(token));
+  client.use(actionRateLimitMiddleware());
 
   const getCharacter = (name: string) =>
     toResult(client.GET("/characters/{name}", { params: { path: { name } } }));
@@ -80,7 +104,64 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
       }),
     );
 
-  return { client, getCharacter, moveCharacter };
+  const rest = (name: string) =>
+    toResult(client.POST("/my/{name}/action/rest", { params: { path: { name } } }));
+
+  const gather = (name: string) =>
+    toResult(client.POST("/my/{name}/action/gathering", { params: { path: { name } } }));
+
+  const fight = (name: string, participants?: readonly string[]) =>
+    toResult(
+      client.POST("/my/{name}/action/fight", {
+        body: participants ? { participants: [...participants] } : undefined,
+        params: { path: { name } },
+      }),
+    );
+
+  const depositItems = (name: string, items: components["schemas"]["SimpleItemSchema"][]) =>
+    toResult(
+      client.POST("/my/{name}/action/bank/deposit/item", {
+        body: items,
+        params: { path: { name } },
+      }),
+    );
+
+  const withdrawItems = (name: string, items: components["schemas"]["SimpleItemSchema"][]) =>
+    toResult(
+      client.POST("/my/{name}/action/bank/withdraw/item", {
+        body: items,
+        params: { path: { name } },
+      }),
+    );
+
+  const depositGold = (name: string, quantity: number) =>
+    toResult(
+      client.POST("/my/{name}/action/bank/deposit/gold", {
+        body: { quantity },
+        params: { path: { name } },
+      }),
+    );
+
+  const withdrawGold = (name: string, quantity: number) =>
+    toResult(
+      client.POST("/my/{name}/action/bank/withdraw/gold", {
+        body: { quantity },
+        params: { path: { name } },
+      }),
+    );
+
+  return {
+    client,
+    depositGold,
+    depositItems,
+    fight,
+    gather,
+    getCharacter,
+    moveCharacter,
+    rest,
+    withdrawGold,
+    withdrawItems,
+  };
 };
 
 export type ArtifactsClient = ReturnType<typeof createArtifactsClient>;
