@@ -4,7 +4,7 @@ import { err, ok, ResultAsync } from "neverthrow";
 import { env } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
 import { API_BASE_URL } from "./constants.js";
-import { createRateLimiter } from "./rateLimiter.js";
+import { createRateLimiter, type RateLimitWindow } from "./rateLimiter.js";
 import type { components, paths } from "./schema.js";
 
 export class ArtifactsApiError extends Error {
@@ -58,20 +58,21 @@ const authMiddleware = (token: string): Middleware => ({
   },
 });
 
-// Per https://docs.artifactsmmo.com/api_guide/rate_limits: the `action`
-// bucket (every POST /my/{name}/action/...) is capped at 10/s, 100/min and
-// 5000/hour, shared across the whole account/IP (i.e. across all 5
-// characters), separately from each character's own cooldown.
-const actionRateLimitMiddleware = (): Middleware => {
-  const limiter = createRateLimiter([
-    { limit: 10, windowMs: 1_000 },
-    { limit: 100, windowMs: 60_000 },
-    { limit: 5_000, windowMs: 3_600_000 },
-  ]);
+/**
+ * Applies a rate limiter to requests matched by `shouldLimit`. Each bucket
+ * documented at https://docs.artifactsmmo.com/api_guide/rate_limits is
+ * shared across the whole account/IP (i.e. across all 5 characters),
+ * separately from each character's own action cooldown.
+ */
+const rateLimitMiddleware = (
+  shouldLimit: (request: Request) => boolean,
+  windows: readonly RateLimitWindow[],
+): Middleware => {
+  const limiter = createRateLimiter(windows);
 
   return {
     async onRequest({ request }) {
-      if (new URL(request.url).pathname.includes("/action/")) {
+      if (shouldLimit(request)) {
         await limiter.acquire();
       }
 
@@ -79,6 +80,13 @@ const actionRateLimitMiddleware = (): Middleware => {
     },
   };
 };
+
+const isActionRequest = (request: Request): boolean =>
+  new URL(request.url).pathname.includes("/action/");
+
+// The `data` bucket covers every GET endpoint this client uses
+// (characters/maps/items/resources/...).
+const isDataRequest = (request: Request): boolean => request.method === "GET";
 
 /**
  * Thin, fully-typed wrapper around the Artifacts MMO REST API.
@@ -91,7 +99,20 @@ const actionRateLimitMiddleware = (): Middleware => {
 export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
   const client = createClient<paths>({ baseUrl: API_BASE_URL });
   client.use(authMiddleware(token));
-  client.use(actionRateLimitMiddleware());
+  client.use(
+    rateLimitMiddleware(isActionRequest, [
+      { limit: 10, windowMs: 1_000 },
+      { limit: 100, windowMs: 60_000 },
+      { limit: 5_000, windowMs: 3_600_000 },
+    ]),
+  );
+  client.use(
+    rateLimitMiddleware(isDataRequest, [
+      { limit: 10, windowMs: 1_000 },
+      { limit: 200, windowMs: 60_000 },
+      { limit: 2_000, windowMs: 3_600_000 },
+    ]),
+  );
 
   const getCharacter = (name: string) =>
     toResult(client.GET("/characters/{name}", { params: { path: { name } } }));

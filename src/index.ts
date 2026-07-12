@@ -6,7 +6,7 @@ const ASSIGNMENTS: readonly { readonly character: string; readonly task: Task }[
   { character: "Cartman", task: { resource: "copper_rocks", type: "farm" } },
   { character: "Kyle", task: { resource: "gudgeon_spot", type: "farm" } },
   { character: "Kenny", task: { resource: "sunflower_field", type: "farm" } },
-  { character: "Stan", task: { item: "fishing_net", type: "craftAndEquip" } },
+  { character: "Stan", task: { item: "copper_axe", type: "craftAndEquip" } },
   { character: "Butters", task: { item: "wooden_shield", type: "craftAndEquip" } },
 ];
 
