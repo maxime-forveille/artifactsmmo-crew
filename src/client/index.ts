@@ -4,7 +4,7 @@ import { err, ok, ResultAsync } from "neverthrow";
 import { env } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
 import { API_BASE_URL } from "./constants.js";
-import type { paths } from "./schema.js";
+import type { components, paths } from "./schema.js";
 
 export class ArtifactsApiError extends Error {
   constructor(
@@ -72,7 +72,15 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
   const getCharacter = (name: string) =>
     toResult(client.GET("/characters/{name}", { params: { path: { name } } }));
 
-  return { client, getCharacter };
+  const moveCharacter = (name: string, destination: components["schemas"]["DestinationSchema"]) =>
+    toResult(
+      client.POST("/my/{name}/action/move", {
+        body: destination,
+        params: { path: { name } },
+      }),
+    );
+
+  return { client, getCharacter, moveCharacter };
 };
 
 export type ArtifactsClient = ReturnType<typeof createArtifactsClient>;

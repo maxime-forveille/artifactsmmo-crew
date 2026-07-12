@@ -25,6 +25,7 @@
     "format:check": "oxfmt --check"
   },
   "dependencies": {
+    "date-fns": "^4.4.0",
     "neverthrow": "^8.2.0",
     "openapi-fetch": "^0.17.0",
     "pino": "^10.3.1",

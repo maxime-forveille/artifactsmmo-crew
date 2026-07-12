@@ -40,7 +40,7 @@ For non-trivial changes: short plan first, then implement, then run tests / form
 
 pnpm repository.
 
-Validation: zod. Dates: luxon.
+Validation: zod. Dates: date-fns (pure functions over native `Date`; avoid class-based date libraries like luxon/moment to stay consistent with "avoid classes"). Temporal is not used yet: not natively available in Node 24 without `--experimental-temporal` or a polyfill dependency — revisit once it ships stable.
 
 ## Code style
 
