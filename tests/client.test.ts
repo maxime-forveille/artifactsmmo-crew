@@ -90,4 +90,29 @@ describe("createArtifactsClient", () => {
     expect(receivedBody).toEqual({ x: 1, y: 2 });
     expect(result.isOk()).toBe(true);
   });
+
+  it("forwards content_code/content_type as query params and returns the map page", async () => {
+    let receivedQuery: Record<string, string> = {};
+
+    server.use(
+      http.get("https://api.artifactsmmo.com/maps", ({ request }) => {
+        receivedQuery = Object.fromEntries(new URL(request.url).searchParams);
+
+        return HttpResponse.json({
+          data: [{ map_id: 42, name: "Copper Rocks", x: 2, y: 1 }],
+          page: 1,
+          pages: 1,
+          size: 50,
+          total: 1,
+        });
+      }),
+    );
+
+    const client = createArtifactsClient("test-token");
+    const result = await client.getMaps({ content_code: "copper_rocks", content_type: "resource" });
+
+    expect(receivedQuery).toEqual({ content_code: "copper_rocks", content_type: "resource" });
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap().data).toEqual([{ map_id: 42, name: "Copper Rocks", x: 2, y: 1 }]);
+  });
 });

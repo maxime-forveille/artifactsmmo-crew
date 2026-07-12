@@ -96,6 +96,9 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
   const getCharacter = (name: string) =>
     toResult(client.GET("/characters/{name}", { params: { path: { name } } }));
 
+  const getMaps = (query?: paths["/maps"]["get"]["parameters"]["query"]) =>
+    toResult(client.GET("/maps", { params: query === undefined ? {} : { query } }));
+
   const moveCharacter = (name: string, destination: components["schemas"]["DestinationSchema"]) =>
     toResult(
       client.POST("/my/{name}/action/move", {
@@ -157,6 +160,7 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
     fight,
     gather,
     getCharacter,
+    getMaps,
     moveCharacter,
     rest,
     withdrawGold,
