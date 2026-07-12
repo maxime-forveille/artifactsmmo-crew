@@ -40,7 +40,7 @@ For non-trivial changes: short plan first, then implement, then run tests / form
 
 pnpm repository.
 
-Validation: zod. Dates: date-fns (pure functions over native `Date`; avoid class-based date libraries like luxon/moment to stay consistent with "avoid classes"). Temporal is not used yet: not natively available in Node 24 without `--experimental-temporal` or a polyfill dependency — revisit once it ships stable.
+Validation: valibot (functional, tree-shakeable API — `v.object()`/`v.pipe()`/`v.safeParse()` as plain functions rather than zod's method-chained builder — and a much smaller bundle; chosen over zod for the same "avoid classes"/functional-first reasoning). Dates: date-fns (pure functions over native `Date`; avoid class-based date libraries like luxon/moment to stay consistent with "avoid classes"). Temporal is not used yet: not natively available in Node 24 without `--experimental-temporal` or a polyfill dependency — revisit once it ships stable.
 
 ## Code style
 

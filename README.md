@@ -31,7 +31,7 @@ Personal TypeScript bot for managing my 5-character crew in Artifacts MMO.
 - **Language:** TypeScript
 - **API:** Artifacts MMO v8.0.1
 - **Package Manager:** pnpm 11.9.0 (enforced via `packageManager`/`devEngines` in `package.json`)
-- **Validation:** Zod
+- **Validation:** Valibot
 - **Dates:** date-fns (Temporal isn't natively available yet on Node 24 without `--experimental-temporal` or a polyfill)
 - **Testing:** Vitest
 - **Linting/Formatting:** oxlint + oxfmt

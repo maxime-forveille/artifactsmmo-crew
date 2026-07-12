@@ -1,29 +1,32 @@
-import { z } from "zod";
+import * as v from "valibot";
 
-const envSchema = z.object({
-  ARTIFACTS_TOKEN: z.string().min(1, "ARTIFACTS_TOKEN is required"),
-  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
-  DISCORD_WEBHOOK_URL: z.url().optional(),
-  ENABLE_NOTIFICATIONS: z
-    .string()
-    .optional()
-    .transform((value) => value === "true"),
+const envSchema = v.object({
+  ARTIFACTS_TOKEN: v.pipe(v.string(), v.minLength(1, "ARTIFACTS_TOKEN is required")),
+  DISCORD_WEBHOOK_URL: v.optional(v.pipe(v.string(), v.url())),
+  ENABLE_NOTIFICATIONS: v.pipe(
+    v.optional(v.string(), "false"),
+    v.transform((value) => value === "true"),
+  ),
+  LOG_LEVEL: v.optional(
+    v.picklist(["fatal", "error", "warn", "info", "debug", "trace", "silent"]),
+    "info",
+  ),
+  NODE_ENV: v.optional(v.picklist(["development", "production", "test"]), "development"),
 });
 
-export type Env = z.infer<typeof envSchema>;
+export type Env = v.InferOutput<typeof envSchema>;
 
 function loadEnv(): Env {
-  const parsed = envSchema.safeParse(process.env);
+  const result = v.safeParse(envSchema, process.env);
 
-  if (!parsed.success) {
-    const issues = parsed.error.issues
-      .map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`)
+  if (!result.success) {
+    const issues = result.issues
+      .map((issue) => `  - ${v.getDotPath(issue) ?? "(root)"}: ${issue.message}`)
       .join("\n");
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
 
-  return parsed.data;
+  return result.output;
 }
 
 export const env = loadEnv();

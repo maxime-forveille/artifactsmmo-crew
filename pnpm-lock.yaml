@@ -219,9 +219,9 @@ importers:
       pino:
         specifier: ^10.3.1
         version: 10.3.1
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
+      valibot:
+        specifier: ^1.4.2
+        version: 1.4.2(typescript@7.0.2)
     devDependencies:
       '@types/node':
         specifier: ^26.1.1
@@ -1384,6 +1384,14 @@ packages:
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
+  valibot@1.4.2:
+    resolution: {integrity: sha512-gjdCvJ6d3RyHAneqxMYMW9QMCwYMb3jpOO0IyHZV1bnRHFBHrX3VkIILt5XYR0WhwHiH7Mty8ovuPZ/O3gamrg==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   vite@8.1.4:
     resolution: {integrity: sha512-bTT9PsdWO+MQMNG9ZXIP/qM9wGh37DFxTV/sPq9cFpHr3w4jkgef032PkAL9jAqhk3Nz8NQw3O8n6/xFkqO4QQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -1475,9 +1483,6 @@ packages:
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
-
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
 
@@ -2328,6 +2333,10 @@ snapshots:
 
   undici-types@8.3.0: {}
 
+  valibot@1.4.2(typescript@7.0.2):
+    optionalDependencies:
+      typescript: 7.0.2
+
   vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(tsx@4.23.0):
     dependencies:
       lightningcss: 1.32.0
@@ -2375,5 +2384,3 @@ snapshots:
       stackback: 0.0.2
 
   wrappy@1.0.2: {}
-
-  zod@4.4.3: {}
