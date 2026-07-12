@@ -91,6 +91,30 @@ describe("createArtifactsClient", () => {
     expect(result.isOk()).toBe(true);
   });
 
+  it("fetches an item by code", async () => {
+    server.use(
+      http.get("https://api.artifactsmmo.com/items/:code", ({ params }) =>
+        HttpResponse.json({
+          data: {
+            code: params["code"],
+            craft: {
+              items: [{ code: "copper_ore", quantity: 6 }],
+              level: 1,
+              quantity: 1,
+              skill: "weaponcrafting",
+            },
+          },
+        }),
+      ),
+    );
+
+    const client = createArtifactsClient("test-token");
+    const result = await client.getItem("copper_pickaxe");
+
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap().data.code).toBe("copper_pickaxe");
+  });
+
   it("forwards content_code/content_type as query params and returns the map page", async () => {
     let receivedQuery: Record<string, string> = {};
 

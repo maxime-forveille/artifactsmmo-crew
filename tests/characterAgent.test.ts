@@ -14,8 +14,10 @@ type Cooldown = components["schemas"]["CooldownSchema"];
 
 type Dependencies = Pick<
   ArtifactsClient,
+  | "craft"
   | "depositGold"
   | "depositItems"
+  | "equip"
   | "fight"
   | "gather"
   | "getCharacter"
@@ -55,12 +57,33 @@ const buildMovementResponse = (expiration: string, mapId: number): MovementRespo
   },
 });
 
+type SkillResponse = components["schemas"]["SkillResponseSchema"];
+type EquipmentResponse = components["schemas"]["EquipmentResponseSchema"];
+
+const buildCraftResponse = (expiration: string): SkillResponse => ({
+  data: {
+    character: buildCharacter(),
+    cooldown: buildCooldown(expiration),
+    details: { items: [], xp: 10 },
+  },
+});
+
+const buildEquipResponse = (expiration: string): EquipmentResponse => ({
+  data: {
+    character: buildCharacter(),
+    cooldown: buildCooldown(expiration),
+    items: [],
+  },
+});
+
 const notImplemented = () =>
   errAsync(new ArtifactsApiError("not implemented in test", 501, undefined));
 
 const defaultDependencies: Dependencies = {
+  craft: notImplemented,
   depositGold: notImplemented,
   depositItems: notImplemented,
+  equip: notImplemented,
   fight: notImplemented,
   gather: notImplemented,
   getCharacter: () => okAsync(buildCharacterResponse()),
@@ -218,5 +241,29 @@ describe("createCharacterAgent", () => {
     expect(moveCharacter).toHaveBeenCalledWith("Cartman", { map_id: 5 });
     expect(result.isOk()).toBe(true);
     expect(agent.getCharacter().map_id).toBe(5);
+  });
+
+  it("craft defaults to quantity undefined and forwards it to the client", async () => {
+    const craft = vi.fn(() => okAsync(buildCraftResponse("2024-01-01T00:00:05.000Z")));
+    const dependencies: Dependencies = { ...defaultDependencies, craft };
+
+    const agent = (await createCharacterAgent(dependencies, "Cartman"))._unsafeUnwrap();
+    const result = await agent.craft("copper_bar", 6);
+
+    expect(craft).toHaveBeenCalledWith("Cartman", "copper_bar", 6);
+    expect(result.isOk()).toBe(true);
+  });
+
+  it("equip forwards the item list to the client", async () => {
+    const equip = vi.fn(() => okAsync(buildEquipResponse("2024-01-01T00:00:05.000Z")));
+    const dependencies: Dependencies = { ...defaultDependencies, equip };
+
+    const agent = (await createCharacterAgent(dependencies, "Cartman"))._unsafeUnwrap();
+    const result = await agent.equip([{ code: "copper_pickaxe", quantity: 1, slot: "weapon" }]);
+
+    expect(equip).toHaveBeenCalledWith("Cartman", [
+      { code: "copper_pickaxe", quantity: 1, slot: "weapon" },
+    ]);
+    expect(result.isOk()).toBe(true);
   });
 });

@@ -99,6 +99,9 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
   const getMaps = (query?: paths["/maps"]["get"]["parameters"]["query"]) =>
     toResult(client.GET("/maps", { params: query === undefined ? {} : { query } }));
 
+  const getItem = (code: string) =>
+    toResult(client.GET("/items/{code}", { params: { path: { code } } }));
+
   const moveCharacter = (name: string, destination: components["schemas"]["DestinationSchema"]) =>
     toResult(
       client.POST("/my/{name}/action/move", {
@@ -117,6 +120,22 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
     toResult(
       client.POST("/my/{name}/action/fight", {
         body: participants ? { participants: [...participants] } : undefined,
+        params: { path: { name } },
+      }),
+    );
+
+  const craft = (name: string, code: string, quantity = 1) =>
+    toResult(
+      client.POST("/my/{name}/action/crafting", {
+        body: { code, quantity },
+        params: { path: { name } },
+      }),
+    );
+
+  const equip = (name: string, items: components["schemas"]["EquipSchema"][]) =>
+    toResult(
+      client.POST("/my/{name}/action/equip", {
+        body: items,
         params: { path: { name } },
       }),
     );
@@ -155,11 +174,14 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
 
   return {
     client,
+    craft,
     depositGold,
     depositItems,
+    equip,
     fight,
     gather,
     getCharacter,
+    getItem,
     getMaps,
     moveCharacter,
     rest,

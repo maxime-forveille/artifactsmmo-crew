@@ -44,6 +44,7 @@ const buildCharacter = (overrides: Partial<CharacterSnapshot> = {}): CharacterSn
   inventory: [],
   inventory_max_items: 20,
   map_id: 1,
+  name: "Cartman",
   ...overrides,
 });
 
