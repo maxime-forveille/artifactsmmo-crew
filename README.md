@@ -204,15 +204,60 @@ Recently delivered (see git log for details):
 
 Up next (not yet started, roughly in order of likely value):
 
-- [ ] **Automated progression decisions** — right now what to farm/hunt is a
-      hardcoded resource/monster code per character. The goal is a decision layer
-      that looks at a character's current level (and gear) and automatically
-      picks the best available thing to do next, gathering or hunting, without
-      a human choosing the target by hand.
+- [ ] **Automated progression decisions** — see the design notes below.
 - [ ] A lightweight way to reassign tasks without restarting the process
 - [ ] Grand Exchange trading
 - [ ] Multi-character boss fights
 - [ ] Discord notifications for notable events (rare drops, task failures)
+
+### Automated progression decisions (in design)
+
+Right now what to farm/hunt/craft is a hardcoded resource/monster/item code
+per character in `src/index.ts`, picked and adjusted by hand every time a
+character levels up or finishes a gear upgrade (this happened repeatedly
+while building the bot so far). The goal is a decision layer that picks the
+best next thing to do on its own. Planned in small, independently-testable
+pieces:
+
+1. ✅ **`isSafeToFight(character, monster)`** (`src/bot/combat.ts`) — a pure
+   heuristic deciding whether a fight is worth attempting, before
+   committing to it. Built, unit-tested, not wired into `hunting.ts` or any
+   `Task` yet.
+   - Per-element damage: attack stat boosted by the attacker's `dmg`/
+     `dmg_<element>` % bonuses (characters only — monsters don't have
+     these), then mitigated by the defender's resistance to that element,
+     summed across all four elements, computed both ways (character →
+     monster and monster → character).
+   - Critical strikes included on both sides (average damage multiplier
+     `1 + 0.5 × crit% / 100`), since gear can swing crit chance a lot (e.g.
+     `copper_dagger` = 35% vs `wooden_stick`'s 5%).
+   - Converted to "turns to kill" vs "turns to die"; safe only if
+     `turns_to_kill ≤ turns_to_die / 2` — a 2x margin, in the same spirit as
+     `restIfLow`'s 50%-HP threshold, to absorb the variance this simplified
+     model doesn't capture (crit streaks, roll luck, ...).
+   - Turn order/initiative is deliberately ignored (documented
+     simplification, not an oversight) — revisit only if real fights diverge
+     too much from the prediction.
+2. **Task-appropriate equipment ("build per task")** — equip whatever fits
+   the activity at hand, not just the highest raw combat stats. E.g.
+   `copper_pickaxe`'s -10% mining cooldown matters while mining,
+   `copper_axe`'s -10% woodcutting cooldown while woodcutting, and the
+   highest safe damage/crit weapon while hunting. Most of the plumbing for
+   this already exists — `craftAndEquip` is bank-aware, idempotent, and can
+   reclaim items from other slots or withdraw them from the bank — so this
+   piece is mainly about _choosing_ the right item per activity and
+   triggering the swap, not new low-level capabilities.
+3. **Target selection by XP/loot rate** — among the candidates that pass
+   `isSafeToFight` (or gatherable resources at an appropriate skill level),
+   pick whichever grinds fastest — estimated XP/action and time/action
+   (accounting for cooldowns) — rather than simply "the next one in level
+   order" or "the hardest one that's still safe".
+
+This will likely replace the fixed resource/monster codes in `farm`/`hunt`
+tasks with periodic re-evaluation (e.g. after every cycle) rather than a
+separate "decide once at startup" step, so a character naturally moves to a
+better target as it levels up or gears up, without a human editing
+`src/index.ts` and restarting.
 
 ## Debugging
 
