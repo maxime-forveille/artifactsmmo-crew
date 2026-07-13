@@ -285,9 +285,16 @@ Recently delivered (see git log for details):
 
 Up next (not yet started, roughly in order of likely value):
 
+- [ ] Dry-run material cost query (`materialsNeededFor`) - the next concrete
+  piece for "Automated progression decisions", point 6 below
+- [ ] Read-only "does any combat slot have an available upgrade" query
+  (companion to the above, smaller)
 - [ ] Grand Exchange trading
 - [ ] Multi-character boss fights
 - [ ] Discord notifications for notable events (rare drops, task failures)
+- [ ] Longer-term: listen for game events (raid spawns, server
+  announcements, ...) instead of only polling - see the closing note under
+  "Automated progression decisions" below
 
 ### Automated progression decisions (in design)
 
@@ -409,6 +416,55 @@ _choosing the activity itself_ - whether a character should be hunting,
 farming (and which skill), or crafting right now, based on what it
 actually needs next (a gear upgrade? a skill level? overall XP?) - that's
 the bigger, still-open piece of "automated progression decisions".
+
+6. **Planned - closing the gap to a `decideActivity()` policy.** Two
+   framings were considered for how `tasks.json` should eventually work:
+   (a) a new `{"type": "auto"}` task where the bot itself decides what a
+   character should be doing, vs (b) keep `tasks.json` as an explicit,
+   human-chosen intent and keep polishing the sub-decisions inside each
+   task type (points 1-5 above). Conclusion: **(b) is not a fork from
+   (a), it's prerequisite infrastructure for it.** Every "auto" task
+   would need to consult exactly the sensing functions points 1-5 already
+   built (`findNextSafeMonster`, `findNextFarmableResource`,
+   `findBestCombatGear`, `findBestGatheringTool`, the observed XP-rate
+   table) - none of that work is wasted regardless of which framing wins.
+   The piece that's genuinely missing isn't an extension of any existing
+   module, it's the decision **policy** itself - the logic that weighs
+   heterogeneous signals (combat XP/s vs a pending gear upgrade vs a
+   crafting recipe) against each other. Two gaps were identified as the
+   natural next steps to make that policy possible without guesswork:
+   - **Gap A (smaller): a read-only "any combat slot upgrade available"
+     query.** `taskRunners.ts` already loops all 8 supported slots
+     (`equipAllCombatGearIfAvailable`/`equipBestCombatGearIfAvailable`),
+     but only as an action pipeline (it crafts and equips immediately).
+     Exposing this as a pure detect-only function in `gear.ts` (reusable
+     by both the existing action pipeline and a future decision layer)
+     would let a policy ask "is there an upgrade at all" without
+     committing to fetching/crafting it.
+   - **Gap B (the real missing piece): a dry-run material-cost query.**
+     `craftAndEquip`/`ensureHeldItem` (`strategies/equipment.ts`) already
+     do full recursive material resolution (inventory -> bank -> craft
+     materials recursively -> else find a resource/monster and
+     gather/hunt), but only as an action pipeline with real side effects
+     (it moves the character, withdraws, gathers, crafts). Without a
+     side-effect-free version that mirrors the same recursion and
+     answers "what's still missing, and where would it come from" as
+     data, a decision policy can't tell "this upgrade is free right now"
+     from "this upgrade needs an hour of mining first" - exactly the
+     judgment a human currently makes by eye when hand-picking
+     `tasks.json` entries. This is the next piece planned for
+     implementation (tentatively `materialsNeededFor` in a new module).
+   - Building Gap A and Gap B closes the remaining distance between (b)
+     and (a): once both exist, a `decideActivity()` policy becomes a
+     matter of combining outputs that already exist as data, rather than
+     inventing new sensing from scratch.
+   - Longer term, and out of scope for now: all of the above is
+     poll-based (the bot only reacts when it next checks). Artifacts MMO
+     exposes server events (e.g. raid spawns, announcements) that could
+     eventually be consumed via a webhook/push mechanism instead of
+     polling, letting the decision layer react immediately to a rare
+     spawn rather than discovering it on the next cycle. Noted here as a
+     future direction, not a near-term piece.
 
 ## Debugging
 
