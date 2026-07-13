@@ -291,13 +291,16 @@ Recently delivered (see git log for details):
   to `findBestCombatGear`, scanning every supported slot in parallel (see
   "Automated progression decisions" below)
 
-Up next (not yet started, roughly in order of likely value):
+Up next (not yet started, roughly in order of likely value - see point 7
+under "Automated progression decisions" for the full staged plan):
 
-- [ ] A `decideActivity()` policy that combines `findNextSafeMonster`,
-  `findNextFarmableResource`, `findCombatGearUpgrades`, and
-  `materialsNeededFor` to pick what a character should be doing on its
-  own - the last remaining piece under "Automated progression
-  decisions", point 6 below
+- [ ] Cost gate on the 3 existing auto-equip call sites, using
+  `materialsNeededFor` - only equip an upgrade found automatically when
+  it's completely free right now
+- [ ] `{"type": "auto"}` task assembling `farm`/`hunt`/`craftAndEquip`
+  within a human-chosen activity family, including going to fetch
+  materials for a worthwhile-but-not-free upgrade
+- [ ] Craft as its own profession activity (bank-surplus detection)
 - [ ] Grand Exchange trading
 - [ ] Multi-character boss fights
 - [ ] Discord notifications for notable events (rare drops, task failures)
@@ -485,6 +488,52 @@ the bigger, still-open piece of "automated progression decisions".
      polling, letting the decision layer react immediately to a rare
      spawn rather than discovering it on the next cycle. Noted here as a
      future direction, not a near-term piece.
+
+7. **Design review: from Gap A/B to `decideActivity()`, staged.** With
+   both gaps done, a dedicated design session settled the shape of the
+   remaining work, deliberately staged from immediate to long-term
+   rather than building the full policy in one pass:
+   - ⚡ **Immediate - a cost gate on the 3 existing auto-equip call
+     sites.** `equipBestCombatGearIfAvailable`, `equipAllCombatGearIfAvailable`,
+     and `equipGatheringToolIfAvailable` (`taskRunners.ts`) all call
+     `craftAndEquip` today for *any* upgrade they find, with no limit on
+     how much gathering/hunting that commits the character to - this is
+     live behavior, not hypothetical. Gate every one of them on
+     `materialsNeededFor` returning `[]` (the upgrade is completely free
+     right now, counting inventory and bank) before calling
+     `craftAndEquip`; otherwise log the upgrade and its cost for
+     visibility, and keep whatever's currently equipped. Strictly more
+     conservative than the current behavior - a free upgrade is still
+     equipped immediately, a costly one is deferred instead of committed
+     to blindly. No new task type, no new plumbing - this only wires
+     together what Gap A/B already provide.
+   - 🕒 **Near-term - build these soon:**
+     - A new `{"type": "auto"}` `Task` (the seed of `decideActivity()`)
+       that assembles `farm`/`hunt`/`craftAndEquip` *within the activity
+       family a human already picked* in `tasks.json` (still not
+       deciding hunt-vs-farm itself yet). This is where a
+       not-free-but-worthwhile upgrade gets a real answer instead of
+       just being logged: go fetch the missing materials (`craftAndEquip`
+       already crosses farm/hunt/bank for a single bounded material need
+       via `ensureHeldItem` - this is deterministic plumbing, not a value
+       judgment, and already runs live today) and resume afterward.
+     - Craft as its own profession activity, not just a means to a combat
+       upgrade: detect a bank surplus worth transforming (profession XP
+       gained + decluttering), the mirror image of `materialsNeededFor`
+       ("what can I make from what's piling up" instead of "what's
+       missing to make this").
+   - 🎯 **Target, longer-term - noted but no infrastructure yet:**
+     - Real cross-family arbitration (hunt vs farm *as an ongoing choice*,
+       not just a one-off material fetch) - blocked on not having a
+       gathering XP/second rate comparable to `observedMonsterXpRates`.
+     - Self-tuned thresholds instead of static ones, once there's enough
+       observed data to tune against (extends the "observed data over a
+       guessed formula" principle `xpRates.ts` already applies to combat).
+     - Richer persistence (SQLite?) if the bot ever needs to track more
+       than what `GET /my/logs/{name}` already exposes for free.
+     - Consuming game events (raid spawns, announcements) via a
+       webhook/push mechanism instead of polling (same item as above,
+       restated here as part of the staged plan).
 
 ## Debugging
 

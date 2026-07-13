@@ -11,6 +11,7 @@ import {
   SUPPORTED_COMBAT_SLOTS,
   type SupportedCombatSlot,
 } from "../gear.js";
+import { materialsNeededFor } from "../materialPlan.js";
 import { findNextFarmableResource, findNextSafeMonster, skillLevel } from "../progression.js";
 import { craftAndEquip } from "../strategies/equipment.js";
 import { runFarmingCycle } from "../strategies/farming.js";
@@ -18,6 +19,7 @@ import { runHuntingCycle } from "../strategies/hunting.js";
 import { runForever } from "./runForever.js";
 
 type GatheringSkill = components["schemas"]["GatheringSkill"];
+type Item = components["schemas"]["ItemSchema"];
 type Monster = components["schemas"]["MonsterSchema"];
 
 export class NoSafeMonsterFoundError extends Error {
@@ -35,13 +37,52 @@ export class NoFarmableResourceFoundError extends Error {
 }
 
 /**
+ * Equips `item` immediately if it's completely free right now - already
+ * held or banked, nothing left to gather/craft for it (see
+ * `materialsNeededFor`). Otherwise logs what's missing and keeps whatever
+ * is currently equipped, rather than committing to however much
+ * gathering/hunting the upgrade would actually take. This is the cost
+ * gate placed in front of every upgrade the bot finds *on its own*
+ * (`findBestGatheringTool`/`findBestCombatGear`) - unlike a human
+ * explicitly listing an item in a `craftAndEquip` task, which always
+ * commits regardless of cost. Failures (checking the cost, or the
+ * craft/equip call itself) are logged and swallowed, same as every other
+ * auto-equip path - callers can always treat this as succeeding.
+ * `context` is only used for logging, to say what the upgrade was for.
+ */
+const equipIfFree = (
+  client: ArtifactsClient,
+  characterName: string,
+  agent: CharacterAgent,
+  item: Item,
+  context: string,
+): ResultAsync<void, never> =>
+  materialsNeededFor(client, agent.getCharacter(), item.code, 1)
+    .andThen((missing) => {
+      if (missing.length > 0) {
+        logger.info(
+          { character: characterName, item: item.code, missing },
+          `${characterName}: found a better ${context} (${item.code}), but it's not free right now - skipping for now`,
+        );
+        return okAsync(undefined);
+      }
+
+      return craftAndEquip(client, agent, item.code);
+    })
+    .orElse((error) => {
+      logger.error(
+        error,
+        `${characterName}: failed to check/equip ${item.code} for ${context}, continuing with current gear`,
+      );
+      return okAsync(undefined);
+    });
+
+/**
  * Equips the best available gathering tool for `skill` (see
- * `findBestGatheringTool`), if any exists at the character's level. A
- * no-op when no such tool is found. Failures (e.g. the craft/equip itself)
- * are logged and swallowed - the character just keeps whatever's
- * currently equipped - so callers can always treat this as succeeding.
- * `resourceCode` is only used for logging, to say what farming was about
- * to start on.
+ * `findBestGatheringTool`), if any exists at the character's level and
+ * it's free right now (see `equipIfFree`). A no-op when no such tool is
+ * found. `resourceCode` is only used for logging, to say what farming was
+ * about to start on.
  */
 const equipGatheringToolIfAvailable = (
   client: ArtifactsClient,
@@ -52,12 +93,14 @@ const equipGatheringToolIfAvailable = (
 ): ResultAsync<void, never> =>
   findBestGatheringTool(client, skill, agent.getCharacter().level)
     .andThen((tool) =>
-      tool === undefined ? okAsync(undefined) : craftAndEquip(client, agent, tool.code),
+      tool === undefined
+        ? okAsync(undefined)
+        : equipIfFree(client, characterName, agent, tool, `gathering tool for ${resourceCode}`),
     )
     .orElse((error) => {
       logger.error(
         error,
-        `${characterName}: failed to equip a gathering tool for ${resourceCode}, continuing with current gear`,
+        `${characterName}: failed to look up a gathering tool for ${resourceCode}, continuing with current gear`,
       );
       return okAsync(undefined);
     });
@@ -134,8 +177,9 @@ export const runAutoFarmTask = (
 
 /**
  * Equips the best available item for `slot` when fighting `monster` (see
- * `findBestCombatGear`), if it differs from what's currently equipped.
- * Same non-blocking failure handling as `equipGatheringToolIfAvailable`.
+ * `findBestCombatGear`), if it differs from what's currently equipped and
+ * it's free right now (see `equipIfFree`). Same non-blocking failure
+ * handling as `equipGatheringToolIfAvailable`.
  */
 const equipBestCombatGearIfAvailable = (
   client: ArtifactsClient,
@@ -146,12 +190,14 @@ const equipBestCombatGearIfAvailable = (
 ): ResultAsync<void, never> =>
   findBestCombatGear(client, agent.getCharacter(), monster, slot, agent.getCharacter().level)
     .andThen((item) =>
-      item === undefined ? okAsync(undefined) : craftAndEquip(client, agent, item.code),
+      item === undefined
+        ? okAsync(undefined)
+        : equipIfFree(client, characterName, agent, item, `${slot} gear for ${monster.code}`),
     )
     .orElse((error) => {
       logger.error(
         error,
-        `${characterName}: failed to equip best ${slot} gear for ${monster.code}, continuing with current gear`,
+        `${characterName}: failed to look up best ${slot} gear for ${monster.code}, continuing with current gear`,
       );
       return okAsync(undefined);
     });

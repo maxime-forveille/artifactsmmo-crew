@@ -298,6 +298,47 @@ describe("runTask", () => {
       ]);
       expect(getMaps).toHaveBeenCalledTimes(1);
     });
+
+    it("does not equip a gathering tool that isn't free right now, keeping the current one", async () => {
+      const character = buildCharacter({ level: 1 });
+      const pickaxe = buildItem({
+        code: "copper_pickaxe",
+        effects: [{ code: "mining", description: "", value: -10 }],
+        type: "weapon",
+      });
+      const getResource = vi.fn(() => okAsync({ data: buildResource() }));
+      const getItems = vi.fn(() =>
+        okAsync({ data: [pickaxe], page: 1, pages: 1, size: 100, total: 1 }),
+      );
+      const getItem = vi.fn(() => okAsync({ data: pickaxe }));
+      const getBankItems = vi.fn(() =>
+        okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
+      );
+      const getResources = vi.fn(() =>
+        okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
+      );
+      const getMonsters = vi.fn(() => okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }));
+      const equip = vi.fn();
+      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const getMaps = vi.fn(() => errAsync(apiError));
+      const client = buildFakeClient({
+        equip,
+        getBankItems,
+        getCharacter: () => okAsync({ data: character }),
+        getItem,
+        getItems,
+        getMaps,
+        getMonsters,
+        getResource,
+        getResources,
+      });
+
+      void runTask(client, "Cartman", { resource: "copper_rocks", type: "farm" });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(getBankItems).toHaveBeenCalledWith({ item_code: "copper_pickaxe" });
+      expect(equip).not.toHaveBeenCalled();
+    });
   });
 
   describe("autoFarm task", () => {
@@ -432,6 +473,49 @@ describe("runTask", () => {
         { code: "copper_dagger", quantity: 1, slot: "weapon" },
       ]);
       expect(getMaps).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not equip a better weapon that isn't free right now, keeping the current one", async () => {
+      const character = buildCombatCharacter({ attack_earth: 20, level: 4 });
+      const monster = buildMonster({ code: "chicken", res_air: 0, res_earth: 0 });
+      const dagger = buildItem({
+        code: "copper_dagger",
+        effects: [{ code: "attack_air", description: "", value: 6 }],
+        type: "weapon",
+      });
+      const getMonster = vi.fn(() => okAsync({ data: monster }));
+      const getItems = vi.fn(() =>
+        okAsync({ data: [dagger], page: 1, pages: 1, size: 100, total: 1 }),
+      );
+      const getItem = vi.fn(() => okAsync({ data: dagger }));
+      const getBankItems = vi.fn(() =>
+        okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
+      );
+      const getResources = vi.fn(() =>
+        okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
+      );
+      const getMonsters = vi.fn(() => okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }));
+      const equip = vi.fn();
+      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const getMaps = vi.fn(() => errAsync(apiError));
+      const client = buildFakeClient({
+        equip,
+        getBankItems,
+        getCharacter: () => okAsync({ data: character }),
+        getItem,
+        getItems,
+        getMaps,
+        getMonster,
+        getMonsters,
+        getResources,
+      });
+
+      void runTask(client, "Cartman", { monster: "chicken", type: "hunt" });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(getMonster).toHaveBeenCalledWith("chicken");
+      expect(getBankItems).toHaveBeenCalledWith({ item_code: "copper_dagger" });
+      expect(equip).not.toHaveBeenCalled();
     });
   });
 
