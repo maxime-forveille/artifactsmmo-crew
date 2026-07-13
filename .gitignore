@@ -6,6 +6,9 @@ coverage/
 .env.*
 !.env.example
 
+tasks.json
+!tasks.example.json
+
 logs/
 *.log
 

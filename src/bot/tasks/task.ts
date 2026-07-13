@@ -1,3 +1,5 @@
+import * as v from "valibot";
+
 /**
  * What a character should be doing. `farm`, `hunt`, and `autoHunt` run
  * forever; `craftAndEquip` works through `items` in order, then stops;
@@ -8,7 +10,8 @@
  * (see `findNextSafeMonster`), so a character naturally moves to a better
  * target as it levels up. New task types should be added here first, then
  * handled in `runTask`'s switch (the `never` check there makes an
- * unhandled case a compile error rather than a silent no-op).
+ * unhandled case a compile error rather than a silent no-op) - and in
+ * `taskSchema` below, so `tasks.json` can express it too.
  */
 export type Task =
   | { readonly type: "autoHunt" }
@@ -20,3 +23,22 @@ export type Task =
     }
   | { readonly type: "farm"; readonly resource: string }
   | { readonly type: "hunt"; readonly monster: string };
+
+/**
+ * Validates the shape of a `Task` read from `tasks.json` (untyped JSON
+ * input, unlike the `Task` values built in-code). Kept in sync with `Task`
+ * by hand - there's no automated check that the two match, but a mismatch
+ * would surface immediately as a type error where `taskSchema`'s inferred
+ * output is used as a `Task`.
+ */
+export const taskSchema = v.variant("type", [
+  v.object({ type: v.literal("autoHunt") }),
+  v.object({ items: v.array(v.string()), type: v.literal("craftAndEquip") }),
+  v.object({
+    items: v.array(v.string()),
+    monster: v.string(),
+    type: v.literal("craftAndEquipThenHunt"),
+  }),
+  v.object({ resource: v.string(), type: v.literal("farm") }),
+  v.object({ monster: v.string(), type: v.literal("hunt") }),
+]);

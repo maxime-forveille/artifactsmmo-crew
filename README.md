@@ -4,10 +4,12 @@ Personal TypeScript bot for managing my 5-character crew in Artifacts MMO.
 
 **Characters:** Cartman, Stan, Kyle, Kenny, Butters. There are no fixed roles —
 every character runs the same small set of `Task` types (`farm`, `hunt`,
-`craftAndEquip`), assigned per-character in `src/index.ts`. What each one is
-currently doing has changed several times already (farming → gearing up →
-hunting) as the crew's needs evolved; reassigning someone just means editing
-one line and restarting `pnpm dev`.
+`craftAndEquip`, `craftAndEquipThenHunt`, `autoHunt`), assigned per-character
+in `tasks.json` (not committed - see `tasks.example.json` and Configuration
+below). What each one is currently doing has changed several times already
+(farming → gearing up → hunting) as the crew's needs evolved; reassigning
+someone means editing that file and restarting `pnpm dev` (a lightweight
+reload without a restart is on the roadmap).
 
 ## Status
 
@@ -37,6 +39,10 @@ pnpm install
 # Set up environment
 cp .env.example .env
 # Edit .env with your Artifacts token
+
+# Set up task assignments
+cp tasks.example.json tasks.json
+# Edit tasks.json to match your characters and what they should be doing
 
 # Run the bot
 pnpm dev
@@ -78,11 +84,14 @@ pnpm dev
 │   │                         # incl. a paced rate limiter (see below)
 │   │                         # (schema.d.ts is generated from the OpenAPI spec,
 │   │                         # see 'pnpm generate:api-types')
-│   ├── utils/                # Config, logging, cooldown helpers
-│   └── index.ts               # Entry point: character -> Task assignments
+│   ├── utils/                # Config, logging, cooldown helpers,
+│   │                          # taskAssignments.ts (parses tasks.json)
+│   └── index.ts               # Entry point: loads tasks.json, runs one
+│                               # runTask per character
 ├── scripts/                    # One-off dev scripts (e.g. OpenAPI codegen)
 ├── tests/
 ├── .env.example
+├── tasks.example.json          # Template for tasks.json (not committed)
 └── package.json
 ```
 
@@ -99,6 +108,31 @@ NODE_ENV=development
 # Reserved for future use - validated but not wired to anything yet
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 ENABLE_NOTIFICATIONS=true
+```
+
+### Task Assignments
+
+`tasks.json` maps each character name to a `Task` (see `src/bot/tasks/task.ts`
+for the full list of task types and their fields); it's read once at startup
+by `loadTaskAssignments` (`src/utils/taskAssignments.ts`), validated with the
+same valibot + "throw a readable summary of every issue" pattern as env vars.
+Not committed (see `tasks.example.json` for the template) since it's runtime
+config for this account's characters, not project source - same treatment as
+`.env`.
+
+```json
+// tasks.json
+{
+  "Cartman": { "type": "autoHunt" },
+  "Stan": { "type": "farm", "resource": "copper_rocks" },
+  "Kyle": { "type": "hunt", "monster": "chicken" },
+  "Kenny": { "type": "craftAndEquip", "items": ["copper_ring", "copper_boots"] },
+  "Butters": {
+    "type": "craftAndEquipThenHunt",
+    "items": ["wooden_staff"],
+    "monster": "yellow_slime"
+  }
+}
 ```
 
 ## What's implemented
@@ -188,7 +222,7 @@ pnpm generate:api-types  # Regenerate src/client/schema.d.ts from the live OpenA
 ## Roadmap
 
 This tracks the bot's own capabilities, not what any character happens to be
-doing right now (that's just runtime config in `src/index.ts`).
+doing right now (that's just runtime config in `tasks.json`).
 
 Recently delivered (see git log for details):
 
@@ -220,14 +254,20 @@ Recently delivered (see git log for details):
   existing bank-aware `craftAndEquip` (see "Automated progression
   decisions" below)
 - ✅ Target selection now prefers whichever safe monster has the best
-  *observed* XP/second rate from the character's own fight history (`GET
-  /my/logs/{name}`), falling back to the highest-level heuristic for
+  _observed_ XP/second rate from the character's own fight history (`GET
+/my/logs/{name}`), falling back to the highest-level heuristic for
   monsters it hasn't fought recently (see "Automated progression
   decisions" below)
+- ✅ Task assignments moved out of `src/index.ts` and into `tasks.json`
+  (`src/utils/taskAssignments.ts`, validated with valibot, same
+  fail-fast-with-a-readable-summary pattern as env vars) - reassigning a
+  character no longer needs a code change, just an edit to that file (a
+  restart is still needed for now - see below)
 
 Up next (not yet started, roughly in order of likely value):
 
-- [ ] A lightweight way to reassign tasks without restarting the process
+- [ ] Reload `tasks.json` without restarting the process (e.g. on file
+      change, or a signal/endpoint to trigger it)
 - [ ] Grand Exchange trading
 - [ ] Multi-character boss fights
 - [ ] Discord notifications for notable events (rare drops, task failures)
@@ -301,7 +341,7 @@ pieces:
    fight response, and in `GET /my/logs/{name}`'s history of past ones).
    - `observedMonsterXpRates(client, characterName)` fetches the
      character's last 100 log entries, sums XP and cooldown seconds per
-     opponent across every fight found (win *or* loss — a loss's 0 XP is
+     opponent across every fight found (win _or_ loss — a loss's 0 XP is
      real data, not something to discard), and returns XP/second per
      monster code. A monster this character hasn't fought recently is
      simply absent from the result, not zero - `findNextSafeMonster` only
