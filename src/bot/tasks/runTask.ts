@@ -2,7 +2,13 @@ import type { ArtifactsClient } from "../../client/index.js";
 import { logger } from "../../utils/logger.js";
 import { createCharacterAgent } from "../characters/characterAgent.js";
 import type { Task } from "./task.js";
-import { runAutoHuntTask, runCraftAndEquipTask, runFarmTask, runHuntTask } from "./taskRunners.js";
+import {
+  runAutoFarmTask,
+  runAutoHuntTask,
+  runCraftAndEquipTask,
+  runFarmTask,
+  runHuntTask,
+} from "./taskRunners.js";
 
 /**
  * Creates a character agent and runs `task` on it. Agent creation failures
@@ -24,6 +30,10 @@ export const runTask = async (
   await agentResult.match(
     async (agent) => {
       switch (task.type) {
+        case "autoFarm": {
+          await runAutoFarmTask(client, characterName, agent, task.skill, signal);
+          return;
+        }
         case "autoHunt": {
           await runAutoHuntTask(client, characterName, agent, signal);
           return;

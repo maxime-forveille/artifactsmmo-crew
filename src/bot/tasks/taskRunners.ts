@@ -6,12 +6,13 @@ import { logger } from "../../utils/logger.js";
 import type { CharacterAgent } from "../characters/characterAgent.js";
 import { restIfLow } from "../combat.js";
 import { findBestCombatWeapon, findBestGatheringTool } from "../gear.js";
-import { findNextSafeMonster } from "../progression.js";
+import { findNextFarmableResource, findNextSafeMonster, skillLevel } from "../progression.js";
 import { craftAndEquip } from "../strategies/equipment.js";
 import { runFarmingCycle } from "../strategies/farming.js";
 import { runHuntingCycle } from "../strategies/hunting.js";
 import { runForever } from "./runForever.js";
 
+type GatheringSkill = components["schemas"]["GatheringSkill"];
 type Monster = components["schemas"]["MonsterSchema"];
 
 export class NoSafeMonsterFoundError extends Error {
@@ -21,25 +22,30 @@ export class NoSafeMonsterFoundError extends Error {
   }
 }
 
+export class NoFarmableResourceFoundError extends Error {
+  constructor(skill: GatheringSkill, level: number) {
+    super(`No ${skill} resource found at or below level ${level}`);
+    this.name = "NoFarmableResourceFoundError";
+  }
+}
+
 /**
- * Equips the best available gathering tool for the skill `resourceCode`
- * requires (see `findBestGatheringTool`), if any exists at the character's
- * level. A no-op when no such tool is found. Failures (e.g. the resource
- * lookup or the craft/equip itself) are logged and swallowed - the
- * character just keeps whatever's currently equipped - so callers can
- * always treat this as succeeding.
+ * Equips the best available gathering tool for `skill` (see
+ * `findBestGatheringTool`), if any exists at the character's level. A
+ * no-op when no such tool is found. Failures (e.g. the craft/equip itself)
+ * are logged and swallowed - the character just keeps whatever's
+ * currently equipped - so callers can always treat this as succeeding.
+ * `resourceCode` is only used for logging, to say what farming was about
+ * to start on.
  */
 const equipGatheringToolIfAvailable = (
   client: ArtifactsClient,
   characterName: string,
   agent: CharacterAgent,
   resourceCode: string,
+  skill: GatheringSkill,
 ): ResultAsync<void, never> =>
-  client
-    .getResource(resourceCode)
-    .andThen((response) =>
-      findBestGatheringTool(client, response.data.skill, agent.getCharacter().level),
-    )
+  findBestGatheringTool(client, skill, agent.getCharacter().level)
     .andThen((tool) =>
       tool === undefined ? okAsync(undefined) : craftAndEquip(client, agent, tool.code),
     )
@@ -58,7 +64,25 @@ export const runFarmTask = async (
   resourceCode: string,
   signal?: AbortSignal,
 ): Promise<void> => {
-  await equipGatheringToolIfAvailable(client, characterName, agent, resourceCode);
+  await client
+    .getResource(resourceCode)
+    .andThen((response) =>
+      equipGatheringToolIfAvailable(
+        client,
+        characterName,
+        agent,
+        resourceCode,
+        response.data.skill,
+      ),
+    )
+    .orElse((error) => {
+      logger.error(
+        error,
+        `${characterName}: failed to look up ${resourceCode} for tool selection, continuing with current gear`,
+      );
+      return okAsync(undefined);
+    });
+
   await runForever(
     characterName,
     "farming cycle",
@@ -66,6 +90,42 @@ export const runFarmTask = async (
     signal,
   );
 };
+
+/**
+ * Same as a fixed `farm`, but re-picks the highest-level resource the
+ * character's `skill` level allows before every cycle instead of using a
+ * fixed code (see `findNextFarmableResource`), equipping the best
+ * gathering tool for that skill each time too. When no resource for this
+ * skill is currently within reach (e.g. a fresh skill with a gap before
+ * the next tier), that's treated the same as any other cycle failure:
+ * logged and retried shortly.
+ */
+export const runAutoFarmTask = (
+  client: ArtifactsClient,
+  characterName: string,
+  agent: CharacterAgent,
+  skill: GatheringSkill,
+  signal?: AbortSignal,
+): Promise<void> =>
+  runForever(
+    characterName,
+    "auto-farm cycle",
+    () =>
+      findNextFarmableResource(client, agent.getCharacter(), skill).andThen((resource) =>
+        resource === undefined
+          ? errAsync(
+              new NoFarmableResourceFoundError(skill, skillLevel(agent.getCharacter(), skill)),
+            )
+          : equipGatheringToolIfAvailable(
+              client,
+              characterName,
+              agent,
+              resource.code,
+              skill,
+            ).andThen(() => runFarmingCycle(client, agent, resource.code)),
+      ),
+    signal,
+  );
 
 /**
  * Equips the best available weapon for fighting `monster` (see

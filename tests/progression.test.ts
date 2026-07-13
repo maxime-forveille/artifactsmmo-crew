@@ -1,7 +1,11 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { findNextSafeMonster } from "../src/bot/progression.js";
+import {
+  findNextFarmableResource,
+  findNextSafeMonster,
+  skillLevel,
+} from "../src/bot/progression.js";
 import { ArtifactsApiError } from "../src/client/index.js";
 import type { ArtifactsClient } from "../src/client/index.js";
 import type { components } from "../src/client/schema.js";
@@ -11,6 +15,8 @@ type Log = components["schemas"]["LogSchema"];
 type LogPage = components["schemas"]["DataPage_LogSchema_"];
 type Monster = components["schemas"]["MonsterSchema"];
 type MonsterPage = components["schemas"]["StaticDataPage_MonsterSchema_"];
+type Resource = components["schemas"]["ResourceSchema"];
+type ResourcePage = components["schemas"]["StaticDataPage_ResourceSchema_"];
 
 const buildCharacter = (overrides: Partial<Character> = {}): Character =>
   ({
@@ -52,6 +58,24 @@ const buildMonster = (overrides: Partial<Monster> = {}): Monster =>
   }) as Monster;
 
 const buildMonsterPage = (data: Monster[]): MonsterPage => ({
+  data,
+  page: 1,
+  pages: 1,
+  size: 50,
+  total: data.length,
+});
+
+const buildResource = (overrides: Partial<Resource> = {}): Resource =>
+  ({
+    code: "copper_rocks",
+    drops: [],
+    level: 1,
+    name: "Copper Rocks",
+    skill: "mining",
+    ...overrides,
+  }) as Resource;
+
+const buildResourcePage = (data: Resource[]): ResourcePage => ({
   data,
   page: 1,
   pages: 1,
@@ -182,6 +206,54 @@ describe("findNextSafeMonster", () => {
     );
 
     expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr()).toBe(apiError);
+  });
+});
+
+describe("skillLevel", () => {
+  it("reads the character field matching each gathering skill", () => {
+    const character = buildCharacter({
+      alchemy_level: 3,
+      fishing_level: 2,
+      mining_level: 8,
+      woodcutting_level: 5,
+    });
+
+    expect(skillLevel(character, "mining")).toBe(8);
+    expect(skillLevel(character, "woodcutting")).toBe(5);
+    expect(skillLevel(character, "fishing")).toBe(2);
+    expect(skillLevel(character, "alchemy")).toBe(3);
+  });
+});
+
+describe("findNextFarmableResource", () => {
+  it("picks the highest-level resource at or below the character's skill level", async () => {
+    const character = buildCharacter({ mining_level: 8 });
+    const low = buildResource({ code: "copper_rocks", level: 1, skill: "mining" });
+    const high = buildResource({ code: "iron_rocks", level: 8, skill: "mining" });
+    const getResources = vi.fn(() => okAsync(buildResourcePage([low, high])));
+
+    const result = await findNextFarmableResource({ getResources }, character, "mining");
+
+    expect(getResources).toHaveBeenCalledWith({ max_level: 8, skill: "mining" });
+    expect(result._unsafeUnwrap()?.code).toBe("iron_rocks");
+  });
+
+  it("returns undefined when no resource matches", async () => {
+    const character = buildCharacter({ mining_level: 1 });
+    const getResources = vi.fn(() => okAsync(buildResourcePage([])));
+
+    const result = await findNextFarmableResource({ getResources }, character, "mining");
+
+    expect(result._unsafeUnwrap()).toBeUndefined();
+  });
+
+  it("propagates a getResources failure", async () => {
+    const apiError = new ArtifactsApiError("boom", 500, undefined);
+    const getResources = vi.fn(() => errAsync(apiError));
+
+    const result = await findNextFarmableResource({ getResources }, buildCharacter(), "mining");
+
     expect(result._unsafeUnwrapErr()).toBe(apiError);
   });
 });

@@ -63,6 +63,15 @@ describe("tasksEqual", () => {
     expect(tasksEqual(base, { ...base, items: ["wooden_stick"] })).toBe(false);
   });
 
+  it("compares autoFarm tasks by skill", () => {
+    expect(
+      tasksEqual({ skill: "mining", type: "autoFarm" }, { skill: "mining", type: "autoFarm" }),
+    ).toBe(true);
+    expect(
+      tasksEqual({ skill: "mining", type: "autoFarm" }, { skill: "fishing", type: "autoFarm" }),
+    ).toBe(false);
+  });
+
   it("treats tasks of different types as unequal", () => {
     expect(tasksEqual({ type: "autoHunt" }, { monster: "chicken", type: "hunt" })).toBe(false);
   });

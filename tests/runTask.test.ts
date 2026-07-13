@@ -300,6 +300,69 @@ describe("runTask", () => {
     });
   });
 
+  describe("autoFarm task", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("picks the highest-level resource for the skill, then farms it", async () => {
+      const character = buildCharacter({ level: 1, mining_level: 8 });
+      const resource = buildResource({ code: "iron_rocks", level: 8, skill: "mining" });
+      const getResources = vi.fn(() =>
+        okAsync({ data: [resource], page: 1, pages: 1, size: 50, total: 1 }),
+      );
+      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const getMaps = vi.fn(() => errAsync(apiError));
+      const client = buildFakeClient({
+        getCharacter: () => okAsync({ data: character }),
+        getMaps,
+        getResources,
+      });
+
+      void runTask(client, "Cartman", { skill: "mining", type: "autoFarm" });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(getResources).toHaveBeenCalledWith({ max_level: 8, skill: "mining" });
+      expect(getMaps).toHaveBeenCalledTimes(1); // resolveLocation("resource", "iron_rocks")
+
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(getMaps).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(getMaps).toHaveBeenCalledTimes(2);
+    });
+
+    it("retries after a delay when no resource is currently within reach for the skill", async () => {
+      const character = buildCharacter({ level: 1, mining_level: 1 });
+      const getResources = vi.fn(() =>
+        okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
+      );
+      const getMaps = vi.fn();
+      const client = buildFakeClient({
+        getCharacter: () => okAsync({ data: character }),
+        getMaps,
+        getResources,
+      });
+
+      void runTask(client, "Cartman", { skill: "mining", type: "autoFarm" });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(getResources).toHaveBeenCalledTimes(1);
+      expect(getMaps).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(getResources).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(getResources).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe("hunt task", () => {
     beforeEach(() => {
       vi.useFakeTimers();

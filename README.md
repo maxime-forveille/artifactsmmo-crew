@@ -4,7 +4,7 @@ Personal TypeScript bot for managing my 5-character crew in Artifacts MMO.
 
 **Characters:** Cartman, Stan, Kyle, Kenny, Butters. There are no fixed roles —
 every character runs the same small set of `Task` types (`farm`, `hunt`,
-`craftAndEquip`, `craftAndEquipThenHunt`, `autoHunt`), assigned per-character
+`craftAndEquip`, `craftAndEquipThenHunt`, `autoHunt`, `autoFarm`), assigned per-character
 in `tasks.json` (not committed - see `tasks.example.json` and Configuration
 below). What each one is currently doing has changed several times already
 (farming → gearing up → hunting) as the crew's needs evolved; reassigning
@@ -61,7 +61,7 @@ pnpm dev
 │   │   │                   # gathering, combat, craft+equip, and bank-deposit
 │   │   │                   # pipelines
 │   │   ├── tasks/          # task.ts: the Task type (farm / hunt / autoHunt /
-│   │   │                   # craftAndEquip / craftAndEquipThenHunt);
+│   │   │                   # autoFarm / craftAndEquip / craftAndEquipThenHunt);
 │   │   │                   # runTask.ts: dispatcher; taskRunners.ts: one
 │   │   │                   # runner per task type; runForever.ts: shared
 │   │   │                   # retry-forever loop
@@ -130,7 +130,7 @@ project source - same treatment as `.env`.
 // tasks.json
 {
   "Cartman": { "type": "autoHunt" },
-  "Stan": { "type": "farm", "resource": "copper_rocks" },
+  "Stan": { "type": "autoFarm", "skill": "mining" },
   "Kyle": { "type": "hunt", "monster": "chicken" },
   "Kenny": { "type": "craftAndEquip", "items": ["copper_ring", "copper_boots"] },
   "Butters": {
@@ -254,6 +254,10 @@ Recently delivered (see git log for details):
 - ✅ `autoHunt` task: picks the best monster that's still safe to fight,
   re-evaluated every cycle instead of a fixed monster code — all 5
   characters run it now (see "Automated progression decisions" below)
+- ✅ `autoFarm` task: same idea for gathering — picks the highest-level
+  resource the character's level in a given skill (mining/woodcutting/
+  fishing/alchemy) allows, re-evaluated every cycle (see "Automated
+  progression decisions" below)
 - ✅ Task-appropriate equipment: `farm` equips the best gathering tool for
   the resource's skill before gathering, and `hunt`/`autoHunt` equip the
   best weapon against the specific monster being fought, both via the
@@ -370,12 +374,28 @@ pieces:
      history (`/my/logs/{name}`, last ~5000 actions), this survives
      process restarts for free - no separate persistence needed for this
      piece.
+5. ✅ **`findNextFarmableResource(client, character, skill)`**
+   (`src/bot/progression.ts`) - the gathering equivalent of point 2: picks
+   the highest-level resource node at or below the character's level in
+   `skill`. Simpler than hunting - there's no "safety" concept for
+   gathering (a gather action can't be lost the way a fight can), so this
+   is just the highest-level match, no XP-rate tracking needed either
+   (gathering always succeeds and takes a fairly consistent amount of
+   time regardless of resource, unlike combat's win/loss variance). Wired
+   in as the new `autoFarm` `Task`, re-picking the resource every cycle -
+   same shape as `autoHunt`, but per-skill: a character has 4 independent
+   gathering skill levels (mining/woodcutting/fishing/alchemy), unlike
+   the single combat level `autoHunt` reads from, so `autoFarm` still
+   needs `skill` specified in `tasks.json` rather than being fully
+   automatic.
 
-This will likely replace the fixed resource/monster codes in `farm`/`hunt`
-tasks with periodic re-evaluation (e.g. after every cycle) rather than a
-separate "decide once at startup" step, so a character naturally moves to a
-better target as it levels up or gears up, without a human editing
-`src/index.ts` and restarting.
+These pieces make each individual activity (a fixed hunt, a fixed farm)
+auto-improve its own target/gear as a character levels up or gears up,
+without a human editing `tasks.json`. What's still fully manual is
+_choosing the activity itself_ - whether a character should be hunting,
+farming (and which skill), or crafting right now, based on what it
+actually needs next (a gear upgrade? a skill level? overall XP?) - that's
+the bigger, still-open piece of "automated progression decisions".
 
 ## Debugging
 

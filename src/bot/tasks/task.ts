@@ -1,19 +1,28 @@
 import * as v from "valibot";
 
+import type { components } from "../../client/schema.js";
+
+type GatheringSkill = components["schemas"]["GatheringSkill"];
+
 /**
- * What a character should be doing. `farm`, `hunt`, and `autoHunt` run
- * forever; `craftAndEquip` works through `items` in order, then stops;
- * `craftAndEquipThenHunt` does the same craftAndEquip pass (a no-op for
- * items already equipped) and then switches to hunting forever - the
- * "get geared up, then go fight" combo. `autoHunt` is like `hunt`, but
- * re-picks the monster before every cycle instead of using a fixed one
- * (see `findNextSafeMonster`), so a character naturally moves to a better
- * target as it levels up. New task types should be added here first, then
- * handled in `runTask`'s switch (the `never` check there makes an
- * unhandled case a compile error rather than a silent no-op) - and in
- * `taskSchema` below, so `tasks.json` can express it too.
+ * What a character should be doing. `farm`, `hunt`, `autoHunt`, and
+ * `autoFarm` run forever; `craftAndEquip` works through `items` in order,
+ * then stops; `craftAndEquipThenHunt` does the same craftAndEquip pass (a
+ * no-op for items already equipped) and then switches to hunting forever -
+ * the "get geared up, then go fight" combo. `autoHunt`/`autoFarm` are like
+ * `hunt`/`farm`, but re-pick the monster/resource before every cycle
+ * instead of using a fixed one (see `findNextSafeMonster` /
+ * `findNextFarmableResource`), so a character naturally moves to a better
+ * target as it (or its relevant skill) levels up - `autoFarm` still needs
+ * `skill` specified since a character has 4 independent gathering skill
+ * levels, unlike the single combat level `autoHunt` works from. New task
+ * types should be added here first, then handled in `runTask`'s switch
+ * (the `never` check there makes an unhandled case a compile error rather
+ * than a silent no-op) - and in `taskSchema` below, so `tasks.json` can
+ * express it too.
  */
 export type Task =
+  | { readonly type: "autoFarm"; readonly skill: GatheringSkill }
   | { readonly type: "autoHunt" }
   | { readonly type: "craftAndEquip"; readonly items: readonly string[] }
   | {
@@ -24,6 +33,8 @@ export type Task =
   | { readonly type: "farm"; readonly resource: string }
   | { readonly type: "hunt"; readonly monster: string };
 
+const gatheringSkillSchema = v.picklist(["alchemy", "fishing", "mining", "woodcutting"] as const);
+
 /**
  * Validates the shape of a `Task` read from `tasks.json` (untyped JSON
  * input, unlike the `Task` values built in-code). Kept in sync with `Task`
@@ -32,6 +43,7 @@ export type Task =
  * output is used as a `Task`.
  */
 export const taskSchema = v.variant("type", [
+  v.object({ skill: gatheringSkillSchema, type: v.literal("autoFarm") }),
   v.object({ type: v.literal("autoHunt") }),
   v.object({ items: v.array(v.string()), type: v.literal("craftAndEquip") }),
   v.object({
@@ -58,6 +70,9 @@ export const tasksEqual = (a: Task, b: Task): boolean => {
   }
 
   switch (a.type) {
+    case "autoFarm": {
+      return b.type === "autoFarm" && a.skill === b.skill;
+    }
     case "autoHunt": {
       return true;
     }

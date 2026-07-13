@@ -6,13 +6,38 @@ import { isSafeToFight } from "./combat.js";
 import { type ObservedMonsterRates, observedMonsterXpRatesOrEmpty } from "./xpRates.js";
 
 type Character = components["schemas"]["CharacterSchema"];
+type GatheringSkill = components["schemas"]["GatheringSkill"];
 type Monster = components["schemas"]["MonsterSchema"];
+type Resource = components["schemas"]["ResourceSchema"];
 
 type ProgressionClient = Pick<ArtifactsClient, "getCharacterLogs" | "getMonsters">;
+type FarmProgressionClient = Pick<ArtifactsClient, "getResources">;
 
-/** The highest-level monster in `monsters`, or undefined if the list is empty. */
-const highestLevel = (monsters: readonly Monster[]): Monster | undefined =>
-  monsters.reduce<Monster | undefined>(
+/** `character`'s level in `skill` (e.g. `mining_level` for `"mining"`). */
+export const skillLevel = (character: Character, skill: GatheringSkill): number => {
+  switch (skill) {
+    case "alchemy": {
+      return character.alchemy_level;
+    }
+    case "fishing": {
+      return character.fishing_level;
+    }
+    case "mining": {
+      return character.mining_level;
+    }
+    case "woodcutting": {
+      return character.woodcutting_level;
+    }
+    default: {
+      const exhaustiveCheck: never = skill;
+      throw new Error(`Unhandled gathering skill: ${JSON.stringify(exhaustiveCheck)}`);
+    }
+  }
+};
+
+/** The highest-level item in `items`, or undefined if the list is empty. */
+const highestLevel = <T extends { readonly level: number }>(items: readonly T[]): T | undefined =>
+  items.reduce<T | undefined>(
     (best, candidate) => (best === undefined || candidate.level > best.level ? candidate : best),
     undefined,
   );
@@ -59,3 +84,23 @@ export const findNextSafeMonster = (
       return highestObservedRate(safe, rates) ?? highestLevel(safe);
     }),
   );
+
+/**
+ * Finds the best resource to gather next for `character` in `skill`: the
+ * highest-level resource node at or below the character's own level in
+ * that skill. Unlike hunting, there's no "safety" concept for gathering -
+ * a gather action can't be lost the way a fight can, and `max_level`
+ * already keeps every candidate within what the character's skill level
+ * allows - so this is just the highest-level match, no extra heuristic
+ * needed. Returns `undefined` if no resource for this skill exists at or
+ * below the character's level in it (e.g. a fresh level-1 skill with a
+ * gap before the next resource tier).
+ */
+export const findNextFarmableResource = (
+  client: FarmProgressionClient,
+  character: Character,
+  skill: GatheringSkill,
+): ResultAsync<Resource | undefined, ArtifactsApiError> =>
+  client
+    .getResources({ max_level: skillLevel(character, skill), skill })
+    .map((page) => highestLevel(page.data));
