@@ -1,4 +1,4 @@
-import { okAsync, type ResultAsync } from "neverthrow";
+import { okAsync, ResultAsync } from "neverthrow";
 
 import type { ArtifactsApiError, ArtifactsClient } from "../client/index.js";
 import type { components } from "../client/schema.js";
@@ -166,6 +166,53 @@ const withContribution = (
   res_fire: stats.res_fire + sign * (contribution.res_fire ?? 0),
   res_water: stats.res_water + sign * (contribution.res_water ?? 0),
 });
+
+/**
+ * Read-only scan across every `SUPPORTED_COMBAT_SLOTS`: reports which
+ * slots have a better item available for `monster`, without equipping (or
+ * even crafting) anything - the detect-only counterpart to
+ * `findBestCombatGear`, meant for a future decision layer to ask "is
+ * there any upgrade at all" before committing to fetching/crafting one
+ * (see the README's "Automated progression decisions").
+ *
+ * A slot is only included when `findBestCombatGear` picks something
+ * *different* from what's already equipped there - `findBestCombatGear`
+ * can return the currently-equipped item itself (e.g. when nothing beats
+ * it), which isn't an upgrade worth reporting.
+ *
+ * Runs every slot's lookup in parallel (`ResultAsync.combine`): unlike the
+ * actual craft/equip pipeline (`taskRunners.ts`'s
+ * `equipAllCombatGearIfAvailable`), this never mutates the character, so
+ * there's no ordering constraint between slots and no reason to serialize
+ * the requests. Kept as a separate function rather than reused by that
+ * pipeline: the pipeline recomputes each slot immediately before acting on
+ * it, on purpose, since equipping one slot (e.g. a helmet's hp) changes
+ * the character's stats and so the ideal pick for slots checked after it -
+ * a batch computed once upfront, like this one, would go stale mid-loop.
+ */
+export const findCombatGearUpgrades = (
+  client: CombatGearClient,
+  character: Character,
+  monster: Monster,
+  maxLevel: number,
+): ResultAsync<
+  readonly { readonly item: Item; readonly slot: SupportedCombatSlot }[],
+  ArtifactsApiError
+> =>
+  ResultAsync.combine(
+    SUPPORTED_COMBAT_SLOTS.map((slot) =>
+      findBestCombatGear(client, character, monster, slot, maxLevel).map((item) => ({
+        item,
+        slot,
+      })),
+    ),
+  ).map((results) =>
+    results.filter(
+      (result): result is { item: Item; slot: SupportedCombatSlot } =>
+        result.item !== undefined &&
+        result.item.code !== equippedItemInSlot(character, result.slot),
+    ),
+  );
 
 /**
  * Finds the best item for `slot` (any of `SUPPORTED_COMBAT_SLOTS`) when

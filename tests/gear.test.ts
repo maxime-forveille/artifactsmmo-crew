@@ -1,7 +1,11 @@
 import { okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { findBestCombatGear, findBestGatheringTool } from "../src/bot/gear.js";
+import {
+  findBestCombatGear,
+  findBestGatheringTool,
+  findCombatGearUpgrades,
+} from "../src/bot/gear.js";
 import type { components } from "../src/client/schema.js";
 
 type Character = components["schemas"]["CharacterSchema"];
@@ -303,5 +307,54 @@ describe("findBestCombatGear", () => {
     );
 
     expect(result._unsafeUnwrap()).toBeUndefined();
+  });
+});
+
+describe("findCombatGearUpgrades", () => {
+  it("only reports slots where the best pick differs from what's already equipped", async () => {
+    const character = buildCharacter({
+      attack_earth: 10,
+      helmet_slot: "basic_helmet",
+      weapon_slot: "",
+    });
+    const monster = buildMonster({ res_earth: 0 });
+    const betterWeapon = buildItem({
+      code: "better_weapon",
+      effects: [{ code: "attack_earth", description: "", value: 20 }],
+    });
+    const basicHelmet = buildItem({
+      code: "basic_helmet",
+      effects: [{ code: "hp", description: "", value: 10 }],
+    });
+
+    const getItem = vi.fn((code: string) =>
+      code === "basic_helmet"
+        ? okAsync({ data: basicHelmet })
+        : okAsync({ data: buildItem({ code }) }),
+    );
+    const getItems = vi.fn((query?: { type?: string }) => {
+      if (query?.type === "weapon") {
+        return okAsync(buildItemPage([betterWeapon]));
+      }
+      if (query?.type === "helmet") {
+        return okAsync(buildItemPage([basicHelmet]));
+      }
+      return okAsync(buildItemPage([]));
+    });
+
+    const result = await findCombatGearUpgrades({ getItem, getItems }, character, monster, 5);
+
+    expect(result.isOk() && result.value).toEqual([{ item: betterWeapon, slot: "weapon" }]);
+  });
+
+  it("reports nothing when no slot has a catalog entry that beats the current gear", async () => {
+    const character = buildCharacter();
+    const monster = buildMonster();
+    const getItem = vi.fn();
+    const getItems = vi.fn(() => okAsync(buildItemPage([])));
+
+    const result = await findCombatGearUpgrades({ getItem, getItems }, character, monster, 5);
+
+    expect(result.isOk() && result.value).toEqual([]);
   });
 });

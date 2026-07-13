@@ -286,11 +286,18 @@ Recently delivered (see git log for details):
   `src/bot/materialPlan.ts`) - read-only version of `ensureHeldItem` that
   reports what's missing to craft/hold an item without acting on it (see
   "Automated progression decisions" below)
+- ✅ Read-only "does any combat slot have an available upgrade" query
+  (`findCombatGearUpgrades`, `src/bot/gear.ts`) - detect-only counterpart
+  to `findBestCombatGear`, scanning every supported slot in parallel (see
+  "Automated progression decisions" below)
 
 Up next (not yet started, roughly in order of likely value):
 
-- [ ] Read-only "does any combat slot have an available upgrade" query
-  (Gap A under "Automated progression decisions", point 6 below)
+- [ ] A `decideActivity()` policy that combines `findNextSafeMonster`,
+  `findNextFarmableResource`, `findCombatGearUpgrades`, and
+  `materialsNeededFor` to pick what a character should be doing on its
+  own - the last remaining piece under "Automated progression
+  decisions", point 6 below
 - [ ] Grand Exchange trading
 - [ ] Multi-character boss fights
 - [ ] Discord notifications for notable events (rare drops, task failures)
@@ -435,14 +442,20 @@ the bigger, still-open piece of "automated progression decisions".
    heterogeneous signals (combat XP/s vs a pending gear upgrade vs a
    crafting recipe) against each other. Two gaps were identified as the
    natural next steps to make that policy possible without guesswork:
-   - **Gap A (smaller): a read-only "any combat slot upgrade available"
-     query.** `taskRunners.ts` already loops all 8 supported slots
-     (`equipAllCombatGearIfAvailable`/`equipBestCombatGearIfAvailable`),
-     but only as an action pipeline (it crafts and equips immediately).
-     Exposing this as a pure detect-only function in `gear.ts` (reusable
-     by both the existing action pipeline and a future decision layer)
-     would let a policy ask "is there an upgrade at all" without
-     committing to fetching/crafting it.
+   - ✅ **Gap A (smaller): a read-only "any combat slot upgrade
+     available" query.** `findCombatGearUpgrades` (`src/bot/gear.ts`)
+     scans all 8 `SUPPORTED_COMBAT_SLOTS` in parallel (`ResultAsync.
+     combine` - safe here since it's read-only, unlike the action
+     pipeline which mutates the character step by step) and reports only
+     the slots where `findBestCombatGear` picks something genuinely
+     different from what's already equipped there. Deliberately kept
+     separate from `taskRunners.ts`'s `equipAllCombatGearIfAvailable`
+     rather than reused by it: that pipeline recomputes each slot
+     immediately before acting on it on purpose (equipping one slot, e.g.
+     a helmet's hp, changes the character's stats and so the ideal pick
+     for slots checked after it), so a batch computed once upfront would
+     go stale mid-loop - the same "separate, parallel, read-only function
+     instead of refactoring the working pipeline" call made for Gap B.
    - ✅ **Gap B (the real missing piece): a dry-run material-cost query.**
      `materialsNeededFor` (`src/bot/materialPlan.ts`) mirrors
      `ensureHeldItem`'s exact recursion (`strategies/equipment.ts`:
