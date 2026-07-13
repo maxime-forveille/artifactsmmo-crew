@@ -20,6 +20,7 @@ type CharacterAgentDependencies = Pick<
   | "fight"
   | "gather"
   | "getCharacter"
+  | "giveItems"
   | "moveCharacter"
   | "rest"
   | "unequip"
@@ -107,6 +108,11 @@ const buildCharacterAgent = (
   const unequip = (items: UnequipItem[]) =>
     withCooldown("unequip", () => client.unequip(name, items).map((response) => response.data));
 
+  const giveItems = (receiverCharacter: string, items: SimpleItem[]) =>
+    withCooldown("giveItems", () =>
+      client.giveItems(name, receiverCharacter, items).map((response) => response.data),
+    );
+
   const fight = (participants?: readonly string[]) =>
     withCooldown("fight", () =>
       client.fight(name, participants).map((response) => {
@@ -144,6 +150,7 @@ const buildCharacterAgent = (
     fight,
     gather,
     getCharacter,
+    giveItems,
     move,
     moveTo,
     name,

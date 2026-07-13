@@ -21,6 +21,7 @@ type Dependencies = Pick<
   | "fight"
   | "gather"
   | "getCharacter"
+  | "giveItems"
   | "moveCharacter"
   | "rest"
   | "unequip"
@@ -101,6 +102,7 @@ const defaultDependencies: Dependencies = {
   fight: notImplemented,
   gather: notImplemented,
   getCharacter: () => okAsync(buildCharacterResponse()),
+  giveItems: notImplemented,
   moveCharacter: notImplemented,
   rest: notImplemented,
   unequip: notImplemented,
@@ -310,6 +312,28 @@ describe("createCharacterAgent", () => {
     const result = await agent.unequip([{ quantity: 1, slot: "weapon" }]);
 
     expect(unequip).toHaveBeenCalledWith("Cartman", [{ quantity: 1, slot: "weapon" }]);
+    expect(result.isOk()).toBe(true);
+  });
+
+  it("giveItems forwards the receiver and item list to the client", async () => {
+    const giveItems = vi.fn(() =>
+      okAsync({
+        data: {
+          character: buildCharacter(),
+          cooldown: buildCooldown("2024-01-01T00:00:05.000Z"),
+          items: [{ code: "copper_dagger", quantity: 1 }],
+          receiver_character: buildCharacter({ name: "Stan" }),
+        },
+      }),
+    );
+    const dependencies: Dependencies = { ...defaultDependencies, giveItems };
+
+    const agent = (await createCharacterAgent(dependencies, "Cartman"))._unsafeUnwrap();
+    const result = await agent.giveItems("Stan", [{ code: "copper_dagger", quantity: 1 }]);
+
+    expect(giveItems).toHaveBeenCalledWith("Cartman", "Stan", [
+      { code: "copper_dagger", quantity: 1 },
+    ]);
     expect(result.isOk()).toBe(true);
   });
 });

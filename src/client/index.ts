@@ -204,6 +204,18 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
       }),
     );
 
+  const giveItems = (
+    name: string,
+    receiverCharacter: string,
+    items: components["schemas"]["SimpleItemSchema"][],
+  ) =>
+    toResult(
+      client.POST("/my/{name}/action/give/item", {
+        body: { character: receiverCharacter, items },
+        params: { path: { name } },
+      }),
+    );
+
   const depositItems = (name: string, items: components["schemas"]["SimpleItemSchema"][]) =>
     toResult(
       client.POST("/my/{name}/action/bank/deposit/item", {
@@ -250,6 +262,7 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
     getMaps,
     getMonsters,
     getResources,
+    giveItems,
     moveCharacter,
     rest,
     unequip,

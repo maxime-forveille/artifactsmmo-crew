@@ -319,6 +319,97 @@ describe("craftAndEquip", () => {
     expect(equip).toHaveBeenCalledWith([{ code: "copper_pickaxe", quantity: 1, slot: "weapon" }]);
   });
 
+  it("deposits everything else at the bank first when there isn't room for a withdrawal", async () => {
+    const state = createFakeCharacterState(5);
+    state.add("junk_item", 4);
+    const bank = new Map<string, number>([["copper_bar", 6]]);
+
+    const getItem = vi.fn((code: string) =>
+      code === "copper_pickaxe"
+        ? okAsync({
+            data: buildItem({
+              code: "copper_pickaxe",
+              craft: {
+                items: [{ code: "copper_bar", quantity: 6 }],
+                level: 1,
+                quantity: 1,
+                skill: "weaponcrafting",
+              },
+              type: "weapon",
+            }),
+          } satisfies ItemResponse)
+        : okAsync({ data: buildItem({ code }) } satisfies ItemResponse),
+    );
+    const getBankItems = vi.fn((query?: { item_code?: string }) =>
+      okAsync(
+        buildBankItemsPage(
+          query?.item_code !== undefined && bank.has(query.item_code)
+            ? [{ code: query.item_code, quantity: bank.get(query.item_code)! }]
+            : [],
+        ),
+      ),
+    );
+    const getMaps = vi.fn(() => okAsync(buildMapPage([buildMap(328)])));
+    const moveTo = vi.fn(() => okAsync(undefined));
+    const depositItems = vi.fn((items: { code: string; quantity: number }[]) => {
+      for (const item of items) {
+        state.remove(item.code, item.quantity);
+      }
+      return okAsync({
+        bank: [],
+        character: state.getCharacter(),
+        cooldown: buildCooldown(),
+        items: [],
+      });
+    });
+    const withdrawItems = vi.fn((items: { code: string; quantity: number }[]) => {
+      for (const item of items) {
+        bank.set(item.code, (bank.get(item.code) ?? 0) - item.quantity);
+        state.add(item.code, item.quantity);
+      }
+      return okAsync({
+        bank: [],
+        character: state.getCharacter(),
+        cooldown: buildCooldown(),
+        items: [],
+      });
+    });
+    const craft = vi.fn((code: string, quantity = 1) => {
+      state.remove("copper_bar", quantity * 6);
+      state.add(code, quantity);
+      return okAsync({
+        character: state.getCharacter(),
+        cooldown: buildCooldown(),
+        details: { items: [], xp: 5 },
+      });
+    });
+    const equip = vi.fn(() =>
+      okAsync({ character: state.getCharacter(), cooldown: buildCooldown(), items: [] }),
+    );
+
+    const result = await craftAndEquip(
+      { getBankItems, getItem, getMaps, getMonsters: vi.fn(), getResources: vi.fn() },
+      {
+        craft,
+        depositItems,
+        equip,
+        fight: vi.fn(),
+        gather: vi.fn(),
+        getCharacter: state.getCharacter,
+        moveTo,
+        rest: vi.fn(),
+        unequip: vi.fn(),
+        withdrawItems,
+      },
+      "copper_pickaxe",
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(depositItems).toHaveBeenCalledWith([{ code: "junk_item", quantity: 4 }]);
+    expect(withdrawItems).toHaveBeenCalledWith([{ code: "copper_bar", quantity: 6 }]);
+    expect(craft).toHaveBeenCalledWith("copper_pickaxe", 1);
+  });
+
   it("unequips a different item already in the slot before equipping the target one", async () => {
     const state = createFakeCharacterState();
     state.add("copper_ring", 1);
@@ -360,6 +451,115 @@ describe("craftAndEquip", () => {
     expect(result.isOk()).toBe(true);
     expect(unequip).toHaveBeenCalledWith([{ quantity: 1, slot: "ring1" }]);
     expect(equip).toHaveBeenCalledWith([{ code: "copper_ring", quantity: 1, slot: "ring1" }]);
+  });
+
+  it("unequips a starter item to use it as a crafting material (wooden_staff needs wooden_stick)", async () => {
+    const held = new Map<string, number>();
+    let weaponSlot = "wooden_stick";
+
+    const getCharacter = (): CharacterSnapshot =>
+      ({
+        ...({} as CharacterSnapshot),
+        hp: 100,
+        inventory: [...held.entries()].map(([code, quantity], index) => ({
+          code,
+          quantity,
+          slot: index,
+        })),
+        inventory_max_items: Number.MAX_SAFE_INTEGER,
+        max_hp: 100,
+        name: "Cartman",
+        weapon_slot: weaponSlot,
+      }) as CharacterSnapshot;
+
+    const getItem = vi.fn((code: string) =>
+      code === "wooden_staff"
+        ? okAsync({
+            data: buildItem({
+              code: "wooden_staff",
+              craft: {
+                items: [
+                  { code: "wooden_stick", quantity: 1 },
+                  { code: "ash_wood", quantity: 4 },
+                ],
+                level: 1,
+                quantity: 1,
+                skill: "weaponcrafting",
+              },
+              type: "weapon",
+            }),
+          } satisfies ItemResponse)
+        : okAsync({ data: buildItem({ code }) } satisfies ItemResponse),
+    );
+    const getMaps = vi.fn((query?: { content_type?: string }) =>
+      okAsync(
+        buildMapPage([
+          buildMap(
+            query?.content_type === "workshop" ? 328 : query?.content_type === "resource" ? 277 : 0,
+          ),
+        ]),
+      ),
+    );
+    const getResources = vi.fn(() => okAsync(buildResourcePage([buildResource("ash_tree")])));
+    const moveTo = vi.fn(() => okAsync(undefined));
+    const unequip = vi.fn((items: { quantity: number; slot: string }[]) => {
+      for (const item of items) {
+        held.set(weaponSlot, (held.get(weaponSlot) ?? 0) + item.quantity);
+      }
+      weaponSlot = "";
+      return okAsync({ character: getCharacter(), cooldown: buildCooldown(), items: [] });
+    });
+    const gather = vi.fn(() => {
+      held.set("ash_wood", (held.get("ash_wood") ?? 0) + 1);
+      return okAsync({
+        character: getCharacter(),
+        cooldown: buildCooldown(),
+        details: { items: [], xp: 5 },
+      });
+    });
+    const craft = vi.fn((code: string, quantity = 1) => {
+      held.set("wooden_stick", (held.get("wooden_stick") ?? 0) - quantity);
+      held.set("ash_wood", (held.get("ash_wood") ?? 0) - quantity * 4);
+      held.set(code, (held.get(code) ?? 0) + quantity);
+      return okAsync({
+        character: getCharacter(),
+        cooldown: buildCooldown(),
+        details: { items: [], xp: 5 },
+      });
+    });
+    const equip = vi.fn(() =>
+      okAsync({ character: getCharacter(), cooldown: buildCooldown(), items: [] }),
+    );
+
+    const result = await craftAndEquip(
+      {
+        getBankItems: buildEmptyGetBankItems(),
+        getItem,
+        getMaps,
+        getMonsters: vi.fn(),
+        getResources,
+      },
+      {
+        craft,
+        depositItems: vi.fn(),
+        equip,
+        fight: vi.fn(),
+        gather,
+        getCharacter,
+        moveTo,
+        rest: vi.fn(),
+        unequip,
+        withdrawItems: vi.fn(),
+      },
+      "wooden_staff",
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(unequip).toHaveBeenCalledTimes(1);
+    expect(unequip).toHaveBeenCalledWith([{ quantity: 1, slot: "weapon" }]);
+    expect(gather).toHaveBeenCalledTimes(4); // 4x ash_wood
+    expect(craft).toHaveBeenCalledWith("wooden_staff", 1);
+    expect(equip).toHaveBeenCalledWith([{ code: "wooden_staff", quantity: 1, slot: "weapon" }]);
   });
 
   it("deposits everything except the target item at the bank when the inventory fills up mid-gather, then resumes", async () => {

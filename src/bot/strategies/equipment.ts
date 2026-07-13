@@ -5,7 +5,7 @@ import type { components } from "../../client/schema.js";
 import { logger } from "../../utils/logger.js";
 import type { CharacterAgent } from "../characters/characterAgent.js";
 import { fightSafely } from "../combat.js";
-import { heldItems, heldQuantity, isInventoryFull } from "../inventory.js";
+import { heldItems, heldQuantity, isInventoryFull, totalItemCount } from "../inventory.js";
 import {
   BANK_CONTENT_CODE,
   findMonsterForDrop,
@@ -101,16 +101,13 @@ const equippedItemInSlot = (character: CharacterSnapshot, slot: EquipSlot): stri
 };
 
 /**
- * Deposits everything except `itemCode` at the bank, then returns to
- * `resourceMapId`, freeing up inventory room without losing progress on the
- * item currently being gathered. Fails with `InventoryFullError` if
- * `itemCode` itself is the only thing held (nothing safe to drop).
+ * Deposits everything except `itemCode` at the bank. Assumes the character
+ * is already there. Fails with `InventoryFullError` if `itemCode` itself is
+ * the only thing held (nothing safe to drop).
  */
-const makeRoomForGathering = (
-  client: EquipmentClient,
-  agent: Pick<EquipmentAgent, "depositItems" | "getCharacter" | "moveTo">,
+const depositEverythingExcept = (
+  agent: Pick<EquipmentAgent, "depositItems" | "getCharacter">,
   itemCode: string,
-  resourceMapId: number,
 ): ResultAsync<void, EquipmentError> => {
   const character = agent.getCharacter();
   const itemsToDeposit = heldItems(character).filter((item) => item.code !== itemCode);
@@ -121,15 +118,27 @@ const makeRoomForGathering = (
 
   logger.info(
     { character: character.name, items: itemsToDeposit },
-    `${character.name}: inventory full, depositing ${itemsToDeposit.length} item type(s) at the bank before continuing to gather ${itemCode}`,
+    `${character.name}: depositing ${itemsToDeposit.length} item type(s) at the bank to make room, keeping ${itemCode}`,
   );
 
-  return resolveLocation(client, "bank", BANK_CONTENT_CODE)
-    .andThen((bankMap) => agent.moveTo(bankMap.map_id))
-    .andThen(() => agent.depositItems(itemsToDeposit))
-    .andThen(() => agent.moveTo(resourceMapId))
-    .map(() => undefined);
+  return agent.depositItems(itemsToDeposit).map(() => undefined);
 };
+
+/**
+ * Deposits everything except `itemCode` at the bank, then returns to
+ * `resourceMapId`, freeing up inventory room without losing progress on the
+ * item currently being gathered.
+ */
+const makeRoomForGathering = (
+  client: EquipmentClient,
+  agent: Pick<EquipmentAgent, "depositItems" | "getCharacter" | "moveTo">,
+  itemCode: string,
+  resourceMapId: number,
+): ResultAsync<void, EquipmentError> =>
+  resolveLocation(client, "bank", BANK_CONTENT_CODE)
+    .andThen((bankMap) => agent.moveTo(bankMap.map_id))
+    .andThen(() => depositEverythingExcept(agent, itemCode))
+    .andThen(() => agent.moveTo(resourceMapId));
 
 const gatherUntilHave = (
   client: EquipmentClient,
@@ -181,6 +190,27 @@ const huntUntilHave = (
 };
 
 /**
+ * Ensures there's room for `incomingQuantity` more units before a withdrawal
+ * (the bank/withdraw action fails with a 497 "inventory full" otherwise,
+ * same as gathering into a full inventory). Deposits everything except
+ * `itemCode` if there isn't enough room; assumes the character is already
+ * at the bank.
+ */
+const ensureRoomFor = (
+  agent: Pick<EquipmentAgent, "depositItems" | "getCharacter">,
+  itemCode: string,
+  incomingQuantity: number,
+): ResultAsync<void, EquipmentError> => {
+  const character = agent.getCharacter();
+
+  if (totalItemCount(character) + incomingQuantity <= character.inventory_max_items) {
+    return okAsync(undefined);
+  }
+
+  return depositEverythingExcept(agent, itemCode);
+};
+
+/**
  * Withdraws up to `missing` units of `itemCode` from the bank, if any are
  * there. A no-op (no trip made) when the bank has none. Checked before
  * gathering/hunting/crafting anything, since materials (or even the target
@@ -188,7 +218,7 @@ const huntUntilHave = (
  */
 const withdrawFromBankIfAvailable = (
   client: EquipmentClient,
-  agent: Pick<EquipmentAgent, "getCharacter" | "moveTo" | "withdrawItems">,
+  agent: Pick<EquipmentAgent, "depositItems" | "getCharacter" | "moveTo" | "withdrawItems">,
   itemCode: string,
   missing: number,
 ): ResultAsync<void, EquipmentError> =>
@@ -202,16 +232,45 @@ const withdrawFromBankIfAvailable = (
 
     const toWithdraw = Math.min(available, missing);
 
-    logger.info(
-      { character: agent.getCharacter().name, item: itemCode, quantity: toWithdraw },
-      `${agent.getCharacter().name}: withdrawing ${toWithdraw}x ${itemCode} from the bank`,
-    );
-
     return resolveLocation(client, "bank", BANK_CONTENT_CODE)
       .andThen((bankMap) => agent.moveTo(bankMap.map_id))
-      .andThen(() => agent.withdrawItems([{ code: itemCode, quantity: toWithdraw }]))
+      .andThen(() => ensureRoomFor(agent, itemCode, toWithdraw))
+      .andThen(() => {
+        logger.info(
+          { character: agent.getCharacter().name, item: itemCode, quantity: toWithdraw },
+          `${agent.getCharacter().name}: withdrawing ${toWithdraw}x ${itemCode} from the bank`,
+        );
+        return agent.withdrawItems([{ code: itemCode, quantity: toWithdraw }]);
+      })
       .map(() => undefined);
   });
+
+/**
+ * Unequips `itemCode` from wherever it's currently equipped (if anywhere),
+ * moving it into inventory - e.g. the starter weapon `wooden_stick` needs to
+ * come off before it can be used as a material for `wooden_staff`. Equipped
+ * slots only ever hold 1 unit, so this contributes at most 1 to `held`.
+ */
+const reclaimEquippedIfAvailable = (
+  agent: Pick<EquipmentAgent, "getCharacter" | "unequip">,
+  itemCode: string,
+): ResultAsync<void, EquipmentError> => {
+  const character = agent.getCharacter();
+  const slot = (Object.keys(SLOT_FIELD) as EquipSlot[]).find(
+    (candidate) => equippedItemInSlot(character, candidate) === itemCode,
+  );
+
+  if (slot === undefined) {
+    return okAsync(undefined);
+  }
+
+  logger.info(
+    { character: character.name, item: itemCode, slot },
+    `${character.name}: unequipping ${itemCode} from ${slot} to use as a crafting material`,
+  );
+
+  return agent.unequip([{ quantity: 1, slot }]).map(() => undefined);
+};
 
 /**
  * Same as `ensureHeld`, but for when the item's data has already been
@@ -231,60 +290,62 @@ const ensureHeldItem = (
     return okAsync(undefined);
   }
 
-  return withdrawFromBankIfAvailable(client, agent, itemCode, quantity - held).andThen(() => {
-    const stillMissing = quantity - heldQuantity(agent.getCharacter(), itemCode);
+  return withdrawFromBankIfAvailable(client, agent, itemCode, quantity - held)
+    .andThen(() => reclaimEquippedIfAvailable(agent, itemCode))
+    .andThen(() => {
+      const stillMissing = quantity - heldQuantity(agent.getCharacter(), itemCode);
 
-    if (stillMissing <= 0) {
-      return okAsync(undefined);
-    }
+      if (stillMissing <= 0) {
+        return okAsync(undefined);
+      }
 
-    if (item.craft?.skill !== undefined) {
-      const craftSkill = item.craft.skill;
-      const craftYield = item.craft.quantity ?? 1;
-      const craftsNeeded = Math.ceil(stillMissing / craftYield);
-      const materials = item.craft.items ?? [];
+      if (item.craft?.skill !== undefined) {
+        const craftSkill = item.craft.skill;
+        const craftYield = item.craft.quantity ?? 1;
+        const craftsNeeded = Math.ceil(stillMissing / craftYield);
+        const materials = item.craft.items ?? [];
 
-      return materials
-        .reduce<ResultAsync<void, EquipmentError>>(
-          (acc, material) =>
-            acc.andThen(() =>
-              ensureHeld(client, agent, material.code, material.quantity * craftsNeeded),
-            ),
-          okAsync(undefined),
+        return materials
+          .reduce<ResultAsync<void, EquipmentError>>(
+            (acc, material) =>
+              acc.andThen(() =>
+                ensureHeld(client, agent, material.code, material.quantity * craftsNeeded),
+              ),
+            okAsync(undefined),
+          )
+          .andThen(() => resolveLocation(client, "workshop", craftSkill))
+          .andThen((workshopMap) => agent.moveTo(workshopMap.map_id))
+          .andThen(() => {
+            logger.info(
+              { character: agent.getCharacter().name, item: itemCode, quantity: craftsNeeded },
+              `${agent.getCharacter().name}: crafting ${craftsNeeded}x ${itemCode}`,
+            );
+            return agent.craft(itemCode, craftsNeeded);
+          })
+          .map(() => undefined);
+      }
+
+      return findResourceForDrop(client, itemCode)
+        .andThen((resource) => resolveLocation(client, "resource", resource.code))
+        .andThen((resourceMap) =>
+          agent
+            .moveTo(resourceMap.map_id)
+            .andThen(() => gatherUntilHave(client, agent, itemCode, quantity, resourceMap.map_id)),
         )
-        .andThen(() => resolveLocation(client, "workshop", craftSkill))
-        .andThen((workshopMap) => agent.moveTo(workshopMap.map_id))
-        .andThen(() => {
-          logger.info(
-            { character: agent.getCharacter().name, item: itemCode, quantity: craftsNeeded },
-            `${agent.getCharacter().name}: crafting ${craftsNeeded}x ${itemCode}`,
-          );
-          return agent.craft(itemCode, craftsNeeded);
-        })
-        .map(() => undefined);
-    }
-
-    return findResourceForDrop(client, itemCode)
-      .andThen((resource) => resolveLocation(client, "resource", resource.code))
-      .andThen((resourceMap) =>
-        agent
-          .moveTo(resourceMap.map_id)
-          .andThen(() => gatherUntilHave(client, agent, itemCode, quantity, resourceMap.map_id)),
-      )
-      .orElse((error) =>
-        error instanceof ResourceNotFoundError
-          ? findMonsterForDrop(client, itemCode)
-              .andThen((monster) => resolveLocation(client, "monster", monster.code))
-              .andThen((monsterMap) =>
-                agent
-                  .moveTo(monsterMap.map_id)
-                  .andThen(() =>
-                    huntUntilHave(client, agent, itemCode, quantity, monsterMap.map_id),
-                  ),
-              )
-          : errAsync(error),
-      );
-  });
+        .orElse((error) =>
+          error instanceof ResourceNotFoundError
+            ? findMonsterForDrop(client, itemCode)
+                .andThen((monster) => resolveLocation(client, "monster", monster.code))
+                .andThen((monsterMap) =>
+                  agent
+                    .moveTo(monsterMap.map_id)
+                    .andThen(() =>
+                      huntUntilHave(client, agent, itemCode, quantity, monsterMap.map_id),
+                    ),
+                )
+            : errAsync(error),
+        );
+    });
 };
 
 /**
@@ -324,9 +385,7 @@ export const craftAndEquip = (
       return errAsync(new UnsupportedEquipSlotError(itemCode, item.type));
     }
 
-    const currentlyEquipped = equippedItemInSlot(agent.getCharacter(), slot);
-
-    if (currentlyEquipped === itemCode) {
+    if (equippedItemInSlot(agent.getCharacter(), slot) === itemCode) {
       logger.info(
         { character: agent.getCharacter().name, item: itemCode, slot },
         `${agent.getCharacter().name}: ${itemCode} already equipped in ${slot}, skipping`,
@@ -334,18 +393,24 @@ export const craftAndEquip = (
       return okAsync(undefined);
     }
 
+    // Re-checked fresh (not captured before ensureHeldItem runs): a material
+    // needed to craft `itemCode` may itself have come from unequipping
+    // whatever was in this exact slot (e.g. wooden_staff needs the starter
+    // wooden_stick, which is usually the equipped weapon).
     return ensureHeldItem(client, agent, item, 1)
-      .andThen(() =>
-        currentlyEquipped === undefined
-          ? okAsync(undefined)
-          : (() => {
-              logger.info(
-                { character: agent.getCharacter().name, item: currentlyEquipped, slot },
-                `${agent.getCharacter().name}: unequipping ${currentlyEquipped} from ${slot} to make room for ${itemCode}`,
-              );
-              return agent.unequip([{ quantity: 1, slot }]).map(() => undefined);
-            })(),
-      )
+      .andThen(() => {
+        const stillEquipped = equippedItemInSlot(agent.getCharacter(), slot);
+
+        if (stillEquipped === undefined) {
+          return okAsync(undefined);
+        }
+
+        logger.info(
+          { character: agent.getCharacter().name, item: stillEquipped, slot },
+          `${agent.getCharacter().name}: unequipping ${stillEquipped} from ${slot} to make room for ${itemCode}`,
+        );
+        return agent.unequip([{ quantity: 1, slot }]).map(() => undefined);
+      })
       .andThen(() => {
         logger.info(
           { character: agent.getCharacter().name, item: itemCode, slot },

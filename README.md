@@ -94,9 +94,10 @@ ENABLE_NOTIFICATIONS=true
 ## What's implemented
 
 - **`ArtifactsClient`** (`src/client/index.ts`) — every method (`getCharacter`,
-  `getMaps`, `getItem`, `getResources`, `getMonsters`, `moveCharacter`, `rest`,
-  `gather`, `fight`, `craft`, `equip`, bank deposit/withdraw, gold) returns a
-  `ResultAsync`, never throws.
+  `getMaps`, `getItem`, `getResources`, `getMonsters`, `getBankItems`,
+  `moveCharacter`, `rest`, `gather`, `fight`, `craft`, `equip`, `unequip`,
+  `giveItems`, bank deposit/withdraw, gold) returns a `ResultAsync`, never
+  throws.
 - **Rate limiting** — a sliding-window limiter per bucket (`action`, `data`),
   with a safety margin under the server's documented limits and _paced_
   requests (never releases a backlog of queued requests all at once - see
@@ -115,17 +116,20 @@ ENABLE_NOTIFICATIONS=true
   to a monster, fight repeatedly (resting below 50% HP, logging losses
   without stopping), bank everything looted.
 - **Craft & equip** (`src/bot/strategies/equipment.ts`) — recursively resolves
-  and gathers/crafts whatever materials are missing (including falling back
-  to hunting when a material is a monster drop rather than a gatherable
-  resource), checking the bank first for anything already stored there
-  before gathering/hunting/crafting more. Equipping is idempotent (skips if
-  the exact target item is already in that slot) and replaces whatever else
-  is equipped there otherwise (unequip, then equip) — so the same item list
-  can be handed to every character and it'll upgrade past their starter gear
+  and gathers/crafts whatever materials are missing, checking in order: held
+  inventory, the bank, whatever's currently equipped (e.g. the starter
+  `wooden_stick` gets unequipped to use as a material for `wooden_staff`),
+  then falls back to gathering, or hunting when a material is a monster drop
+  rather than a gatherable resource. Equipping is idempotent (skips if the
+  exact target item is already in that slot) and replaces whatever else is
+  equipped there otherwise (unequip, then equip) — so the same item list can
+  be handed to every character and it'll upgrade past their starter gear
   instead of treating it as "already equipped".
-- **Inventory-full handling** — both farming and hunting bank everything once
+- **Inventory-full handling** — farming and hunting bank everything once
   full; mid-craft material gathering deposits everything _except_ the item
-  being accumulated so progress isn't lost.
+  being accumulated so progress isn't lost; a bank withdrawal that wouldn't
+  fit deposits everything else first (all react to the same 497 "inventory
+  full" the game returns).
 - **Tasks** (`src/bot/tasks/runTask.ts`) — `farm` and `hunt` loop forever;
   `craftAndEquip` works through a list of items once. `src/index.ts` assigns
   one task per character.
@@ -166,9 +170,6 @@ pnpm generate:api-types  # Regenerate src/client/schema.d.ts from the live OpenA
   builds multi-character boss fights or raids yet.
 - **No trading** — Grand Exchange buy/sell and NPC trading aren't
   implemented.
-- **`wooden_stick`** (needed for `wooden_staff`) has no craft recipe and isn't
-  dropped by any resource or monster found so far — likely a quest/starter-only
-  item, deferred indefinitely.
 - **Discord notifications** — `DISCORD_WEBHOOK_URL`/`ENABLE_NOTIFICATIONS`
   are validated as env vars but nothing sends notifications yet.
 
@@ -190,6 +191,14 @@ Recently delivered (see git log for details):
 - ✅ Bank-aware material sourcing (checks the bank before re-gathering/hunting)
 - ✅ Equip upgrades replace whatever's already in a slot (unequip + equip)
   instead of treating starter gear as a permanent placeholder
+- ✅ Equipped items get reclaimed as crafting materials when needed (e.g. the
+  starter `wooden_stick` weapon is exactly what `wooden_staff` needs)
+- ✅ Bank withdrawals that wouldn't fit in the inventory deposit everything
+  else first, instead of hitting the game's 497 "inventory full" error
+- ✅ Character-to-character item transfers (`giveItems`) — not wired into any
+  `Task` yet (it needs both characters on the same tile, which the current
+  one-character-per-task model doesn't coordinate), but available and used
+  for one-off moves like consolidating a spare weapon onto one character
 
 Up next (not yet started, roughly in order of likely value):
 
