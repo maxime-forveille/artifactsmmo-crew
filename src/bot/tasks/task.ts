@@ -42,3 +42,44 @@ export const taskSchema = v.variant("type", [
   v.object({ resource: v.string(), type: v.literal("farm") }),
   v.object({ monster: v.string(), type: v.literal("hunt") }),
 ]);
+
+const stringArraysEqual = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((item, index) => item === b[index]);
+
+/**
+ * Structural equality for two `Task`s - used by `taskSupervisor.ts` to
+ * decide whether a character's reloaded `tasks.json` entry actually
+ * changed anything, rather than restarting every character on every
+ * reload regardless of whether their task is still the same.
+ */
+export const tasksEqual = (a: Task, b: Task): boolean => {
+  if (a.type !== b.type) {
+    return false;
+  }
+
+  switch (a.type) {
+    case "autoHunt": {
+      return true;
+    }
+    case "craftAndEquip": {
+      return b.type === "craftAndEquip" && stringArraysEqual(a.items, b.items);
+    }
+    case "craftAndEquipThenHunt": {
+      return (
+        b.type === "craftAndEquipThenHunt" &&
+        a.monster === b.monster &&
+        stringArraysEqual(a.items, b.items)
+      );
+    }
+    case "farm": {
+      return b.type === "farm" && a.resource === b.resource;
+    }
+    case "hunt": {
+      return b.type === "hunt" && a.monster === b.monster;
+    }
+    default: {
+      const exhaustiveCheck: never = a;
+      throw new Error(`Unhandled task type: ${JSON.stringify(exhaustiveCheck)}`);
+    }
+  }
+};

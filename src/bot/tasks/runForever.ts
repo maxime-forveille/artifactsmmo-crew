@@ -7,14 +7,23 @@ const RETRY_DELAY_MS = 10_000;
 
 /**
  * Runs `cycle()` forever, logging its outcome each time and waiting
- * `RETRY_DELAY_MS` before retrying after a failure.
+ * `RETRY_DELAY_MS` before retrying after a failure. Stops cleanly, without
+ * running another cycle, once `signal` is aborted - checked only between
+ * cycles (never mid-cycle: an in-flight API call can't be cancelled once
+ * sent), so a reassignment can take up to one full cycle to actually apply.
  */
 export const runForever = async <E extends Error>(
   characterName: string,
   label: string,
   cycle: () => ResultAsync<void, E>,
+  signal?: AbortSignal,
 ): Promise<void> => {
   for (;;) {
+    if (signal?.aborted) {
+      logger.info({ character: characterName }, `${characterName}: ${label} stopped (reassigned)`);
+      return;
+    }
+
     const result = await cycle();
 
     await result.match(

@@ -56,10 +56,14 @@ export const runFarmTask = async (
   characterName: string,
   agent: CharacterAgent,
   resourceCode: string,
+  signal?: AbortSignal,
 ): Promise<void> => {
   await equipGatheringToolIfAvailable(client, characterName, agent, resourceCode);
-  await runForever(characterName, "farming cycle", () =>
-    runFarmingCycle(client, agent, resourceCode),
+  await runForever(
+    characterName,
+    "farming cycle",
+    () => runFarmingCycle(client, agent, resourceCode),
+    signal,
   );
 };
 
@@ -91,6 +95,7 @@ export const runHuntTask = async (
   characterName: string,
   agent: CharacterAgent,
   monsterCode: string,
+  signal?: AbortSignal,
 ): Promise<void> => {
   await client
     .getMonster(monsterCode)
@@ -105,8 +110,11 @@ export const runHuntTask = async (
       return okAsync(undefined);
     });
 
-  await runForever(characterName, "hunting cycle", () =>
-    runHuntingCycle(client, agent, monsterCode),
+  await runForever(
+    characterName,
+    "hunting cycle",
+    () => runHuntingCycle(client, agent, monsterCode),
+    signal,
   );
 };
 
@@ -130,32 +138,47 @@ export const runAutoHuntTask = (
   client: ArtifactsClient,
   characterName: string,
   agent: CharacterAgent,
+  signal?: AbortSignal,
 ): Promise<void> =>
-  runForever(characterName, "auto-hunt cycle", () =>
-    restIfLow(agent).andThen(() =>
-      findNextSafeMonster(client, agent.getCharacter()).andThen((monster) =>
-        monster === undefined
-          ? errAsync(new NoSafeMonsterFoundError(agent.getCharacter().level))
-          : equipCombatWeaponIfAvailable(client, characterName, agent, monster).andThen(() =>
-              runHuntingCycle(client, agent, monster.code),
-            ),
+  runForever(
+    characterName,
+    "auto-hunt cycle",
+    () =>
+      restIfLow(agent).andThen(() =>
+        findNextSafeMonster(client, agent.getCharacter()).andThen((monster) =>
+          monster === undefined
+            ? errAsync(new NoSafeMonsterFoundError(agent.getCharacter().level))
+            : equipCombatWeaponIfAvailable(client, characterName, agent, monster).andThen(() =>
+                runHuntingCycle(client, agent, monster.code),
+              ),
+        ),
       ),
-    ),
+    signal,
   );
 
 /**
  * Crafts and equips each item in `items`, one after another. A failure on
  * one item is logged but doesn't stop the rest of the list (e.g. so a
  * ring recipe hiccup doesn't prevent the character from still getting
- * their boots).
+ * their boots). Stops early, without starting the next item, once
+ * `signal` is aborted.
  */
 export const runCraftAndEquipTask = async (
   client: ArtifactsClient,
   characterName: string,
   agent: CharacterAgent,
   items: readonly string[],
+  signal?: AbortSignal,
 ): Promise<void> => {
   for (const itemCode of items) {
+    if (signal?.aborted) {
+      logger.info(
+        { character: characterName },
+        `${characterName}: craft/equip stopped (reassigned)`,
+      );
+      return;
+    }
+
     const result = await craftAndEquip(client, agent, itemCode);
 
     await result.match(

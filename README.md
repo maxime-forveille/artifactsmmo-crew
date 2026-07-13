@@ -8,8 +8,8 @@ every character runs the same small set of `Task` types (`farm`, `hunt`,
 in `tasks.json` (not committed - see `tasks.example.json` and Configuration
 below). What each one is currently doing has changed several times already
 (farming → gearing up → hunting) as the crew's needs evolved; reassigning
-someone means editing that file and restarting `pnpm dev` (a lightweight
-reload without a restart is on the roadmap).
+someone just means editing that file - the running bot picks up the change
+on its own within a few seconds, no restart needed.
 
 ## Status
 
@@ -78,6 +78,10 @@ pnpm dev
 │   │   ├── xpRates.ts       # observedMonsterXpRates: XP/second per monster,
 │   │   │                    # derived from GET /my/logs/{name} - no guessed
 │   │   │                    # game formula, only data the API has revealed
+│   │   ├── taskSupervisor.ts # runTaskSupervisor/reconcileTasks: re-reads
+│   │   │                     # tasks.json on an interval and starts/stops/
+│   │   │                     # restarts characters per AbortController
+│   │   │                     # (see task.ts's tasksEqual for the diffing)
 │   │   └── world.ts         # Resolves resource/monster/workshop codes to
 │   │                        # map positions
 │   ├── client/              # Typed, Result-based Artifacts MMO API wrapper,
@@ -86,8 +90,8 @@ pnpm dev
 │   │                         # see 'pnpm generate:api-types')
 │   ├── utils/                # Config, logging, cooldown helpers,
 │   │                          # taskAssignments.ts (parses tasks.json)
-│   └── index.ts               # Entry point: loads tasks.json, runs one
-│                               # runTask per character
+│   └── index.ts               # Entry point: wires bot + loadTaskAssignments
+│                               # into runTaskSupervisor
 ├── scripts/                    # One-off dev scripts (e.g. OpenAPI codegen)
 ├── tests/
 ├── .env.example
@@ -113,12 +117,14 @@ ENABLE_NOTIFICATIONS=true
 ### Task Assignments
 
 `tasks.json` maps each character name to a `Task` (see `src/bot/tasks/task.ts`
-for the full list of task types and their fields); it's read once at startup
-by `loadTaskAssignments` (`src/utils/taskAssignments.ts`), validated with the
-same valibot + "throw a readable summary of every issue" pattern as env vars.
-Not committed (see `tasks.example.json` for the template) since it's runtime
-config for this account's characters, not project source - same treatment as
-`.env`.
+for the full list of task types and their fields); it's parsed and validated
+by `loadTaskAssignments` (`src/utils/taskAssignments.ts`) with the same
+valibot + "throw a readable summary of every issue" pattern as env vars, and
+re-read every 10 seconds while the bot runs - editing it takes effect without
+a restart (see `src/bot/taskSupervisor.ts`, and the Roadmap section below for
+exactly when a change applies). Not committed (see `tasks.example.json` for
+the template) since it's runtime config for this account's characters, not
+project source - same treatment as `.env`.
 
 ```json
 // tasks.json
@@ -261,13 +267,20 @@ Recently delivered (see git log for details):
 - ✅ Task assignments moved out of `src/index.ts` and into `tasks.json`
   (`src/utils/taskAssignments.ts`, validated with valibot, same
   fail-fast-with-a-readable-summary pattern as env vars) - reassigning a
-  character no longer needs a code change, just an edit to that file (a
-  restart is still needed for now - see below)
+  character no longer needs a code change, just an edit to that file
+- ✅ `tasks.json` reloads without restarting the process
+  (`src/bot/taskSupervisor.ts`): re-read every 10s, diffed per character
+  (`tasksEqual`), and only characters whose task actually changed get
+  restarted - everyone else keeps running untouched. A restart means an
+  `AbortController` per character is aborted and its (forever-looping)
+  task is awaited before the new one starts, so a reassignment applies
+  cleanly between cycles, never mid-action - see `runForever`'s doc
+  comment for exactly when that check happens (can take up to one full
+  cycle). A JSON typo mid-edit is logged and skipped, not fatal - the bot
+  keeps running the last-known-good assignments.
 
 Up next (not yet started, roughly in order of likely value):
 
-- [ ] Reload `tasks.json` without restarting the process (e.g. on file
-      change, or a signal/endpoint to trigger it)
 - [ ] Grand Exchange trading
 - [ ] Multi-character boss fights
 - [ ] Discord notifications for notable events (rare drops, task failures)
