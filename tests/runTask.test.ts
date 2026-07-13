@@ -121,6 +121,59 @@ describe("runTask", () => {
     ]);
   });
 
+  describe("craftAndEquipThenHunt task", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("crafts/equips the items, then switches to hunting", async () => {
+      const character = buildCharacter({
+        inventory: [{ code: "copper_ring", quantity: 1, slot: 1 }],
+      });
+      const equip = vi.fn(() =>
+        okAsync({
+          data: { character, cooldown: buildCooldown("2024-01-01T00:00:03.000Z"), items: [] },
+        }),
+      );
+      const getItem = vi.fn(() =>
+        okAsync({ data: buildItem({ code: "copper_ring", type: "ring" }) }),
+      );
+      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const getMaps = vi.fn(() => errAsync(apiError));
+      const client = buildFakeClient({
+        equip,
+        getCharacter: () => okAsync({ data: character }),
+        getItem,
+        getMaps,
+      });
+
+      void runTask(client, "Cartman", {
+        items: ["copper_ring"],
+        monster: "chicken",
+        type: "craftAndEquipThenHunt",
+      });
+
+      // Craft/equip phase resolves immediately (item already held), then the
+      // hunt phase starts and retries on failure just like a plain "hunt" task.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(equip).toHaveBeenCalledWith("Cartman", [
+        { code: "copper_ring", quantity: 1, slot: "ring1" },
+      ]);
+      expect(getMaps).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(getMaps).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(getMaps).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe("farm task", () => {
     beforeEach(() => {
       vi.useFakeTimers();

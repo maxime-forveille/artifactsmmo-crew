@@ -2,12 +2,20 @@ import { type Task, runTask } from "./bot/tasks/runTask.js";
 import { bot } from "./client/index.js";
 import { logger } from "./utils/logger.js";
 
+// Craft/equip wooden_staff (a no-op if already equipped), then switch to
+// hunting yellow_slime forever.
+const TASK: Task = {
+  items: ["wooden_staff"],
+  monster: "yellow_slime",
+  type: "craftAndEquipThenHunt",
+};
+
 const ASSIGNMENTS: readonly { readonly character: string; readonly task: Task }[] = [
-  { character: "Cartman", task: { items: ["copper_dagger"], type: "craftAndEquip" } },
-  { character: "Kyle", task: { items: ["copper_dagger"], type: "craftAndEquip" } },
-  { character: "Kenny", task: { items: ["copper_dagger"], type: "craftAndEquip" } },
-  { character: "Stan", task: { items: ["copper_dagger"], type: "craftAndEquip" } },
-  { character: "Butters", task: { items: ["copper_dagger"], type: "craftAndEquip" } },
+  { character: "Cartman", task: TASK },
+  { character: "Kyle", task: TASK },
+  { character: "Kenny", task: TASK },
+  { character: "Stan", task: TASK },
+  { character: "Butters", task: TASK },
 ];
 
 async function main() {

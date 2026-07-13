@@ -131,8 +131,10 @@ ENABLE_NOTIFICATIONS=true
   fit deposits everything else first (all react to the same 497 "inventory
   full" the game returns).
 - **Tasks** (`src/bot/tasks/runTask.ts`) — `farm` and `hunt` loop forever;
-  `craftAndEquip` works through a list of items once. `src/index.ts` assigns
-  one task per character.
+  `craftAndEquip` works through a list of items once;
+  `craftAndEquipThenHunt` does both (gear up, then hunt forever - the
+  craft/equip part is a no-op for characters that already have the item).
+  `src/index.ts` assigns one task per character.
 - **Tests** — 60+ Vitest tests (dependency-injected fakes/neverthrow, no real
   network except `tests/client.test.ts`, which uses MSW for HTTP-contract
   tests).

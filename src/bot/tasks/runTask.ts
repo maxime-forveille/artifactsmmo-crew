@@ -11,13 +11,20 @@ const RETRY_DELAY_MS = 10_000;
 
 /**
  * What a character should be doing. `farm` and `hunt` run forever;
- * `craftAndEquip` works through `items` in order, then stops. New task
- * types should be added here first, then handled in `runTask`'s switch
- * (the `never` check below makes an unhandled case a compile error rather
- * than a silent no-op).
+ * `craftAndEquip` works through `items` in order, then stops;
+ * `craftAndEquipThenHunt` does the same craftAndEquip pass (a no-op for
+ * items already equipped) and then switches to hunting forever - the
+ * "get geared up, then go fight" combo. New task types should be added
+ * here first, then handled in `runTask`'s switch (the `never` check below
+ * makes an unhandled case a compile error rather than a silent no-op).
  */
 export type Task =
   | { readonly type: "craftAndEquip"; readonly items: readonly string[] }
+  | {
+      readonly type: "craftAndEquipThenHunt";
+      readonly items: readonly string[];
+      readonly monster: string;
+    }
   | { readonly type: "farm"; readonly resource: string }
   | { readonly type: "hunt"; readonly monster: string };
 
@@ -116,6 +123,11 @@ export const runTask = async (
       switch (task.type) {
         case "craftAndEquip": {
           await runCraftAndEquipTask(client, characterName, agent, task.items);
+          return;
+        }
+        case "craftAndEquipThenHunt": {
+          await runCraftAndEquipTask(client, characterName, agent, task.items);
+          await runHuntTask(client, characterName, agent, task.monster);
           return;
         }
         case "farm": {
