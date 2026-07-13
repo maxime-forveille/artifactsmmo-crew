@@ -83,7 +83,16 @@ export const isSafeToFight = (character: CombatStats, monster: CombatStats): boo
 // landing exactly on 0 HP - which happened in practice when this was `>=`.
 const REST_THRESHOLD_RATIO = 0.5;
 
-const restIfLow = (
+/**
+ * Rests if HP is at or below half of max HP - a safety net callers should
+ * run regardless of whether they've already picked a next fight, so a
+ * character that just barely survived a loss always gets a chance to heal
+ * back up. `isSafeToFight`-based target selection can otherwise correctly
+ * (if unhelpfully) decide that nothing is safe to fight at critically low
+ * HP, leaving a character stuck forever if resting only ever happened
+ * inside the fight loop itself (see `runAutoHuntTask`).
+ */
+export const restIfLow = (
   agent: Pick<CombatAgent, "getCharacter" | "rest">,
 ): ResultAsync<void, ArtifactsApiError> => {
   const character = agent.getCharacter();

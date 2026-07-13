@@ -4,6 +4,7 @@ import type { ArtifactsClient } from "../../client/index.js";
 import type { components } from "../../client/schema.js";
 import { logger } from "../../utils/logger.js";
 import type { CharacterAgent } from "../characters/characterAgent.js";
+import { restIfLow } from "../combat.js";
 import { findBestCombatWeapon, findBestGatheringTool } from "../gear.js";
 import { findNextSafeMonster } from "../progression.js";
 import { craftAndEquip } from "../strategies/equipment.js";
@@ -114,9 +115,16 @@ export const runHuntTask = async (
  * before every cycle instead of using a fixed code (see
  * `findNextSafeMonster`), equipping the best weapon for that monster each
  * time too (see `equipCombatWeaponIfAvailable`) since the target - and so
- * the ideal weapon - can change from one cycle to the next. When nothing
- * is currently safe to fight, that's treated the same as any other cycle
- * failure: logged and retried shortly.
+ * the ideal weapon - can change from one cycle to the next. Rests first,
+ * unconditionally, before even looking for a target: `isSafeToFight` can
+ * correctly decide nothing is safe to fight at critically low HP, and
+ * without this, a character that just barely survived a loss would never
+ * get a chance to heal - `restIfLow` only otherwise runs inside the fight
+ * loop itself, which this cycle would never reach in that case (regression:
+ * characters getting stuck retrying `NoSafeMonsterFoundError` forever at
+ * ~1 HP). When nothing is currently safe to fight even after resting,
+ * that's treated the same as any other cycle failure: logged and retried
+ * shortly.
  */
 export const runAutoHuntTask = (
   client: ArtifactsClient,
@@ -124,12 +132,14 @@ export const runAutoHuntTask = (
   agent: CharacterAgent,
 ): Promise<void> =>
   runForever(characterName, "auto-hunt cycle", () =>
-    findNextSafeMonster(client, agent.getCharacter()).andThen((monster) =>
-      monster === undefined
-        ? errAsync(new NoSafeMonsterFoundError(agent.getCharacter().level))
-        : equipCombatWeaponIfAvailable(client, characterName, agent, monster).andThen(() =>
-            runHuntingCycle(client, agent, monster.code),
-          ),
+    restIfLow(agent).andThen(() =>
+      findNextSafeMonster(client, agent.getCharacter()).andThen((monster) =>
+        monster === undefined
+          ? errAsync(new NoSafeMonsterFoundError(agent.getCharacter().level))
+          : equipCombatWeaponIfAvailable(client, characterName, agent, monster).andThen(() =>
+              runHuntingCycle(client, agent, monster.code),
+            ),
+      ),
     ),
   );
 

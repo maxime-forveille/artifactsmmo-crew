@@ -383,7 +383,12 @@ describe("runTask", () => {
     });
 
     it("picks a safe monster via findNextSafeMonster, then hunts it", async () => {
-      const character = buildCombatCharacter({ attack_earth: 20, hp: 150, level: 4 });
+      const character = buildCombatCharacter({
+        attack_earth: 20,
+        hp: 150,
+        level: 4,
+        max_hp: 150,
+      });
       const monster = buildMonster({ attack_water: 4, code: "chicken", hp: 60, level: 1 });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [monster], page: 1, pages: 1, size: 50, total: 1 }),
@@ -412,7 +417,10 @@ describe("runTask", () => {
     });
 
     it("retries after a delay when no monster is currently safe to fight", async () => {
-      const character = buildCombatCharacter({ hp: 10, level: 4 }); // 0 attack in every element
+      // Full HP, 0 attack in every element - nothing is safe because it
+      // can't deal damage, not because of low HP (see the dedicated resting
+      // test below for that case).
+      const character = buildCombatCharacter({ hp: 100, level: 4, max_hp: 100 });
       const dangerousMonster = buildMonster({ attack_earth: 50, code: "cow", hp: 2_000, level: 4 });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [dangerousMonster], page: 1, pages: 1, size: 50, total: 1 }),
@@ -435,6 +443,37 @@ describe("runTask", () => {
 
       await vi.advanceTimersByTimeAsync(1);
       expect(getMonsters).toHaveBeenCalledTimes(2);
+    });
+
+    it("rests first even when no monster ends up being safe (regression: characters stuck retrying forever at critically low HP)", async () => {
+      // At 1/170 HP, isSafeToFight correctly finds nothing safe to fight -
+      // but that must not prevent resting: without a rest-first step, a
+      // character in this state could never recover (see combat.ts's
+      // restIfLow doc comment).
+      const character = buildCombatCharacter({ attack_earth: 20, hp: 1, level: 4, max_hp: 170 });
+      const anyMonster = buildMonster({ code: "chicken", hp: 60, level: 1 });
+      const getMonsters = vi.fn(() =>
+        okAsync({ data: [anyMonster], page: 1, pages: 1, size: 50, total: 1 }),
+      );
+      const rest = vi.fn(() =>
+        okAsync({
+          data: {
+            character: buildCombatCharacter({ attack_earth: 20, hp: 170, level: 4, max_hp: 170 }),
+            cooldown: buildCooldown("2024-01-01T00:00:03.000Z"),
+            hp_restored: 169,
+          },
+        }),
+      );
+      const client = buildFakeClient({
+        getCharacter: () => okAsync({ data: character }),
+        getMonsters,
+        rest,
+      });
+
+      void runTask(client, "Cartman", { type: "autoHunt" });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(rest).toHaveBeenCalledTimes(1);
     });
   });
 });
