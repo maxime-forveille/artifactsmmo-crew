@@ -239,7 +239,7 @@ pnpm generate:api-types  # Regenerate src/client/schema.d.ts from the live OpenA
   now checks the character's actual crafting-skill level
   (`weaponcrafting_level`, `gearcrafting_level`, `jewelrycrafting_level`,
   ..., via `craftSkillLevel` in `progression.ts`) against `item.craft.level`
-  *before* gathering a single material, failing fast with a dedicated
+  _before_ gathering a single material, failing fast with a dedicated
   `InsufficientCraftingLevelError` instead of wasting a real `craft` API
   call that was always going to fail. What's still missing is the
   follow-up: the eventual answer isn't just "skip this upgrade", it's
@@ -252,11 +252,11 @@ pnpm generate:api-types  # Regenerate src/client/schema.d.ts from the live OpenA
 - **No cost/risk weighing for a "known" material source, only
   exists/doesn't** — `materialsNeededFor`'s `source` classification (see
   "Automated progression decisions" below) only ever says a raw material
-  is gatherable, huntable, or unknown - never *how* risky or expensive
+  is gatherable, huntable, or unknown - never _how_ risky or expensive
   going to get it actually is. `UnsafeMonsterError` (a monster drop that
   isn't safe to fight, added after a live incident - see "Automated
   progression decisions" point 7) and `InsufficientCraftingLevelError`
-  (above) both cover a *binary* safety/eligibility check, not a
+  (above) both cover a _binary_ safety/eligibility check, not a
   cost/value judgment - a known-safe, known-eligible source can still
   take an arbitrarily long time to fetch (no quantity cap either, see
   point 7), and nothing here weighs that against how good the upgrade
@@ -269,7 +269,7 @@ pnpm generate:api-types  # Regenerate src/client/schema.d.ts from the live OpenA
   cumulatively exceed the server's limit even though no single process
   lifetime ever saw more than its own local cap - confirmed live. Static-
   catalog caching (`src/client/memoize.ts`, see "What's implemented")
-  removes most of the *demand* that led to this, but doesn't fix the
+  removes most of the _demand_ that led to this, but doesn't fix the
   underlying blind spot; persisting the limiter's state across restarts
   (ties into the SQLite idea already noted for other reasons) would.
 - **`observedMonsterXpRates` re-fetches 100 log entries every `autoHunt`
@@ -414,9 +414,9 @@ Up next (not yet started, roughly in order of likely value - see point 7
 under "Automated progression decisions" for the full staged plan):
 
 - [ ] Recycling low-level crafted items to reclaim raw materials - idea
-  raised but deliberately not designed yet, open questions noted as-is
-  rather than guessed at:
-  - Default rule floated: only ever recycle *crafted* items (not raw
+      raised but deliberately not designed yet, open questions noted as-is
+      rather than guessed at:
+  - Default rule floated: only ever recycle _crafted_ items (not raw
     resources) whose level is comfortably below the character's own -
     exact threshold not decided.
   - Exception: never recycle a gathering tool that's still the best
@@ -431,13 +431,13 @@ under "Automated progression decisions" for the full staged plan):
 - [ ] Multi-character boss fights
 - [ ] Discord notifications for notable events (rare drops, task failures)
 - [ ] Longer-term: listen for game events (raid spawns, server
-  announcements, ...) instead of only polling - see the closing note under
-  "Automated progression decisions" below
+      announcements, ...) instead of only polling - see the closing note under
+      "Automated progression decisions" below
 
 ### Automated progression decisions (in design)
 
 Even with `tasks.json` (no-restart reassignment) and the `auto*` task
-variants below, *which* task type each character runs is still a human
+variants below, _which_ task type each character runs is still a human
 decision, picked and adjusted by hand every time a character levels up or
 finishes a gear upgrade (this happened repeatedly while building the bot so
 far). The goal is a decision layer that picks the best next thing to do on
@@ -574,7 +574,7 @@ the bigger, still-open piece of "automated progression decisions".
    - ✅ **Gap A (smaller): a read-only "any combat slot upgrade
      available" query.** `findCombatGearUpgrades` (`src/bot/gear.ts`)
      scans all 8 `SUPPORTED_COMBAT_SLOTS` in parallel (`ResultAsync.
-     combine` - safe here since it's read-only, unlike the action
+combine` - safe here since it's read-only, unlike the action
      pipeline which mutates the character step by step) and reports only
      the slots where `findBestCombatGear` picks something genuinely
      different from what's already equipped there. Deliberately kept
@@ -593,7 +593,7 @@ the bigger, still-open piece of "automated progression decisions".
      side-effect-free query: it takes a character snapshot and returns
      `readonly MissingMaterial[]` (`{itemCode, missingQuantity, source}`,
      `source` being `{type: "gather"|"hunt", ...code}` or `{type:
-     "unknown"}`) instead of moving/withdrawing/gathering/crafting
+"unknown"}`) instead of moving/withdrawing/gathering/crafting
      anything. A decision policy can now tell "this upgrade is free right
      now" from "this upgrade needs an hour of mining first" without
      acting on it. Known simplifications (documented in the module):
@@ -623,7 +623,7 @@ the bigger, still-open piece of "automated progression decisions".
      sites.** `equipBestCombatGearIfAvailable` (weapon, every cycle),
      `equipAllCombatGearIfAvailable` (8 slots, on level-up), and
      `equipGatheringToolIfAvailable` (gathering tool, at farm/autoFarm
-     start) all called `craftAndEquip` for *any* upgrade they found, with
+     start) all called `craftAndEquip` for _any_ upgrade they found, with
      no limit on how much gathering/hunting that committed the character
      to - this was live behavior, not hypothetical. All three now gate on
      `materialsNeededFor` returning `[]` (the upgrade is completely free
@@ -641,7 +641,7 @@ the bigger, still-open piece of "automated progression decisions".
      8-slot gear scan (`equipAllCombatGearIfAvailable` in
      `runAutoHuntTask`) now uses a new `equipWorthwhileUpgrade` gate
      instead of the strict free-only one - it commits to `craftAndEquip`
-     as long as every missing material has a *known* source (a
+     as long as every missing material has a _known_ source (a
      gatherable resource or a monster, per `materialsNeededFor`'s
      `source` field), skipping only when something can't be traced to
      either at all. `craftAndEquip`/`ensureHeldItem` already cross
@@ -654,7 +654,7 @@ the bigger, still-open piece of "automated progression decisions".
      free-only gate (`equipIfFree`) - paying a gathering/hunting detour
      that often would be too disruptive; only the rare, once-per-level
      checkpoint affords a costlier commitment. Known v1 simplification:
-     no cap on *how much* is missing before committing (no quantity
+     no cap on _how much_ is missing before committing (no quantity
      threshold yet) - see the self-tuned-thresholds item below for why a
      static number wasn't invented here.
      Two real bugs surfaced live once this shipped, both fixed (see
@@ -664,8 +664,8 @@ the bigger, still-open piece of "automated progression decisions".
      first scan; and the fallback that hunts a monster for a raw material
      had no `isSafeToFight` check at all, unlike the main `autoHunt` loop,
      so a known-but-dangerous source was fought anyway instead of skipped.
-     Both are a direct consequence of committing to a *known* source
-     without weighing *how risky or costly* it actually is - the
+     Both are a direct consequence of committing to a _known_ source
+     without weighing _how risky or costly_ it actually is - the
      `craftAndEquip`/`ensureHeldItem` fallback still has no notion of
      "this source exists but isn't worth (or safe) pursuing", only
      "exists" vs "unknown"; `UnsafeMonsterError` covers the safety half of
@@ -681,7 +681,7 @@ the bigger, still-open piece of "automated progression decisions".
      not wired into any task yet).** `findCraftableFromBankSurplus`
      (`src/bot/materialPlan.ts`) is the mirror image of
      `materialsNeededFor`: given the bank's contents, it finds items the
-     character could craft *right now* without gathering or hunting
+     character could craft _right now_ without gathering or hunting
      anything more, and - unlike every other gear-upgrade path in this
      codebase (see "Known Limitations") - it actually checks the
      character's crafting-skill level (`weaponcrafting_level`,
@@ -696,7 +696,7 @@ the bigger, still-open piece of "automated progression decisions".
      wiring it into an actual task (crafting for profession XP, not just
      combat gear) is the next piece.
    - 🎯 **Target, longer-term - noted but no infrastructure yet:**
-     - Real cross-family arbitration (hunt vs farm *as an ongoing choice*,
+     - Real cross-family arbitration (hunt vs farm _as an ongoing choice_,
        not just a one-off material fetch) - blocked on not having a
        gathering XP/second rate comparable to `observedMonsterXpRates`.
      - Self-tuned thresholds instead of static ones, once there's enough
@@ -724,9 +724,9 @@ the bigger, still-open piece of "automated progression decisions".
       level), divert instead into crafting whatever
       `findCraftableFromBankSurplus` currently finds (`craftFromBankSurplus`)
       - opportunistic, already-available profession XP, rather than a
-      new "craft something, anything, just for the XP" mechanic. If
-      surplus has nothing craftable either, fall back to hunting and
-      simply retry later.
+        new "craft something, anything, just for the XP" mechanic. If
+        surplus has nothing craftable either, fall back to hunting and
+        simply retry later.
    4. Closes the loop: the exact `{skill, requiredLevel}` pairs seen in
       step 3's `InsufficientCraftingLevelError`s are tracked
       (`PendingCraftUnlocks`), and the full 8-slot gear scan re-runs not
@@ -734,24 +734,24 @@ the bigger, still-open piece of "automated progression decisions".
       tracked profession level actually reaches its recorded target -
       not on every minor XP tick, only when a specific known block is
       actually cleared.
-   `ensureHeld` (`strategies/equipment.ts`, previously private) is now
-   exported for step 3 - it already does "obtain N of this item by
-   whatever means, without equipping", needed since filler items aren't
-   necessarily equippable (e.g. cooking output), which `craftAndEquip`
-   can't handle (it requires an equip slot to exist at all). Everything
-   else composes signals that already existed (`findCombatGearUpgrades`,
-   `materialsNeededFor`, `InsufficientCraftingLevelError`,
-   `findCraftableFromBankSurplus`, `craftSkillLevel`) - no new sensing
-   was needed.
+      `ensureHeld` (`strategies/equipment.ts`, previously private) is now
+      exported for step 3 - it already does "obtain N of this item by
+      whatever means, without equipping", needed since filler items aren't
+      necessarily equippable (e.g. cooking output), which `craftAndEquip`
+      can't handle (it requires an equip slot to exist at all). Everything
+      else composes signals that already existed (`findCombatGearUpgrades`,
+      `materialsNeededFor`, `InsufficientCraftingLevelError`,
+      `findCraftableFromBankSurplus`, `craftSkillLevel`) - no new sensing
+      was needed.
 
    Bug found live during rollout: `findCraftableFromBankSurplus` reports
-   the full theoretical amount craftable from the *entire* bank surplus
+   the full theoretical amount craftable from the _entire_ bank surplus
    (by design - see point 7's description of it), which can vastly
    exceed what fits in a character's inventory at once - a bank holding
    enough raw material for 156 crafts tried to withdraw all of it in one
    go and failed outright (`InventoryFullError`, then a real 497 - no
    inventory is anywhere near that large). A filler craft is meant to
-   make *some* progress each cycle, not bulk-produce everything the bank
+   make _some_ progress each cycle, not bulk-produce everything the bank
    could theoretically support, so `craftFromBankSurplus` now caps each
    attempt to `MAX_FILLER_CRAFT_BATCH` (5) crafts - deliberately small
    and not derived from the recipe's own material-to-output ratio
@@ -768,7 +768,7 @@ the bigger, still-open piece of "automated progression decisions".
 
 Everything above is about a single character deciding its own next move.
 But some decisions only make sense with visibility across all 5
-characters at once: who should farm a resource because a *different*
+characters at once: who should farm a resource because a _different_
 character needs it to craft, who should switch to processing a bank
 surplus, or several characters teaming up for a fight the game models as
 a group encounter (see "Known Limitations" - multi-character boss fights
