@@ -68,6 +68,7 @@ pnpm dev
 │   │   ├── combat.ts        # fightSafely: rests when HP is low, fights once,
 │   │   │                    # logs a loss; averageDamagePerTurn/isSafeToFight:
 │   │   │                    # the damage model shared with gear.ts
+│   │   ├── crewPolicy.ts    # Pure snapshot -> proposed task assignments
 │   │   ├── crewSnapshot.ts  # Read-only shared view of all characters + bank
 │   │   ├── gear.ts          # Task-appropriate equipment: findBestGatheringTool
 │   │   │                    # (best tool for a gathering skill) and
@@ -206,6 +207,10 @@ project source - same treatment as `.env`.
   and every bank page into one deterministic, read-only value. It is the
   observational foundation for cross-character decisions and deliberately
   performs no assignment or game action yet.
+- **Crew policy producer** (`src/bot/crewPolicy.ts`) — applies a pure policy to
+  every character with access to the complete shared snapshot and returns
+  proposed `TaskAssignment[]`. Its conservative default keeps combat
+  progression running through `autoHunt`; proposals are not executed yet.
 - **Tests** — 190+ Vitest tests (dependency-injected fakes/neverthrow, no real
   network except `tests/client.test.ts`, which uses MSW for HTTP-contract
   tests).
@@ -419,6 +424,10 @@ Recently delivered (see git log for details):
   account-character read plus every bank page produces a deterministic,
   read-only view for future cross-character policies. This first slice only
   senses account state; it does not assign tasks or perform actions.
+- ✅ Pure crew assignment producer (`proposeCrewAssignments`,
+  `src/bot/crewPolicy.ts`): applies a policy once per character while exposing
+  the full shared snapshot to every decision. Its explicit baseline proposes
+  `autoHunt` for everyone; nothing consumes or executes the proposal yet.
 
 Up next (not yet started, roughly in order of likely value - see point 7
 under "Automated progression decisions" for the full staged plan):
@@ -767,12 +776,15 @@ per-character work, with the first observational slice now delivered:
    principle `xpRates.ts` already applies to combat rates. Revisit with
    something like SQLite once there's a real need for history/aggregation
    the API doesn't already give for free, not before.
-2. The orchestrator itself becomes another producer of `TaskAssignment[]`,
-   feeding the exact `reconcileTasks`/`taskSupervisor.ts` mechanism that
-   already exists (today fed by a human editing `tasks.json`) - not a new
-   execution model. Each character keeps running its own
-   `runTask`/`runForever` loop, oblivious to the orchestrator; it just
-   receives a different task from time to time, exactly like a human
+2. 🟡 The orchestrator itself becomes another producer of
+   `TaskAssignment[]`, feeding the exact `reconcileTasks`/
+   `taskSupervisor.ts` mechanism that already exists (today fed by a human
+   editing `tasks.json`) - not a new execution model.
+   `proposeCrewAssignments` now provides the pure snapshot-to-proposal
+   boundary, with `autoHunt` as a conservative baseline. It is deliberately
+   not connected to `reconcileTasks` yet. Each character will keep running
+   its own `runTask`/`runForever` loop, oblivious to the orchestrator; it will
+   just receive a different task from time to time, exactly like a human
    editing `tasks.json` does today.
 3. Once proven, the orchestrator is expected to become the sole source of
    assignments - `tasks.json` (the human-edited one) fades out as the
