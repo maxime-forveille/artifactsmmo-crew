@@ -83,8 +83,10 @@ prefix before discovering a duplicate character or missing Goal.
 processing, and snapshot refresh in one serialized rolling loop. Existing
 Activities remain concurrent; each terminal outcome refreshes observation and
 re-enters policy with its Blocker details before the next queued outcome is
-handled. Expected and unexpected asynchronous failures are reported without
-leaving stale Reservations in runtime state.
+handled. Snapshot failures classified as retryable wait and retry inside the
+same event, so policy never runs on stale observation. Expected and unexpected
+asynchronous failures are reported without leaving stale Reservations in
+runtime state.
 
 `runtime/taskSupervisor.ts` currently supervises long-running tasks with one
 `AbortController` per character. Its useful behavior should survive the

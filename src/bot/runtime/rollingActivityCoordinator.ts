@@ -1,4 +1,4 @@
-import { err, type Result, type ResultAsync } from "neverthrow";
+import { err, ResultAsync, type Result } from "neverthrow";
 
 import { createActivityEventProcessor } from "./activityEventProcessor.js";
 import type { ActivityRunOutcome, LaunchedActivity } from "./activityLauncher.js";
@@ -34,7 +34,9 @@ type RollingActivityCoordinatorDependencies<
   plan: RollingActivityPlanner<EActivity, EPlan>;
   refreshSnapshot: () => ResultAsync<CrewSnapshot, ESnapshot>;
   reportError: (error: unknown) => void;
+  shouldRetrySnapshotFailure: (error: ESnapshot) => boolean;
   startActivity: ActivityStarter<EActivity>;
+  waitBeforeSnapshotRetry: () => Promise<void>;
 }>;
 
 type RollingActivityCoordinator<EPlan extends Error> = Readonly<{
@@ -67,6 +69,22 @@ export const createRollingActivityCoordinator = <
 
   const getSnapshot = (): CrewSnapshot => snapshot;
   const getState = (): OrchestratorState => state;
+
+  const refreshSnapshotWithRetry = (): ResultAsync<CrewSnapshot, ESnapshot> =>
+    ResultAsync.fromSafePromise(
+      (async (): Promise<Result<CrewSnapshot, ESnapshot>> => {
+        for (;;) {
+          const refreshed = await dependencies.refreshSnapshot();
+
+          if (refreshed.isOk() || !dependencies.shouldRetrySnapshotFailure(refreshed.error)) {
+            return refreshed;
+          }
+
+          dependencies.reportError(refreshed.error);
+          await dependencies.waitBeforeSnapshotRetry();
+        }
+      })(),
+    ).andThen((result) => result);
 
   const notifyIfIdle = (): void => {
     if (pendingEvents !== 0 || runningActivities !== 0) {
@@ -135,7 +153,7 @@ export const createRollingActivityCoordinator = <
     const processor = createActivityEventProcessor<EActivity, ESnapshot>(
       state,
       snapshot,
-      dependencies.refreshSnapshot,
+      refreshSnapshotWithRetry,
     );
     const processed = await processor.process(outcome).finally(() => {
       state = processor.getState();

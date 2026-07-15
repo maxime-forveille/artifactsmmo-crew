@@ -85,7 +85,7 @@ new orchestration Interface.
 - [x] Keep in-flight Reservations visible to policy.
 - [x] Retry Transient Failures without invoking policy again.
 - [x] Return Blockers to policy with their Goal preserved.
-- [ ] Retry failed Crew Snapshot refreshes before replanning.
+- [x] Retry failed Crew Snapshot refreshes before replanning.
 
 ### 4. Extract existing automatic decisions
 

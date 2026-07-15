@@ -95,6 +95,11 @@ const createStarter = () => {
 const unchangedPlan = (state: OrchestratorState): Result<ActivityPlan, TestPlanError> =>
   ok({ activities: [], state });
 
+const noSnapshotRetry = {
+  shouldRetrySnapshotFailure: (_error: TestSnapshotError) => false,
+  waitBeforeSnapshotRetry: async () => undefined,
+};
+
 describe("createRollingActivityCoordinator", () => {
   it("starts the initial policy plan and exposes its Reservations", () => {
     const assignment = buildAssignment("Stan", "goal-copper");
@@ -105,6 +110,7 @@ describe("createRollingActivityCoordinator", () => {
     );
     const { startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(initialState, initialSnapshot, {
+      ...noSnapshotRetry,
       plan,
       refreshSnapshot: () => okAsync(initialSnapshot),
       reportError: vi.fn(),
@@ -132,6 +138,7 @@ describe("createRollingActivityCoordinator", () => {
     const reportError = vi.fn();
     const { completions, startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(buildState(), initialSnapshot, {
+      ...noSnapshotRetry,
       plan,
       refreshSnapshot: () => okAsync(refreshedSnapshot),
       reportError,
@@ -173,6 +180,7 @@ describe("createRollingActivityCoordinator", () => {
       .mockReturnValueOnce(okAsync(secondSnapshot));
     const { completions, startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(buildState(), initialSnapshot, {
+      ...noSnapshotRetry,
       plan,
       refreshSnapshot,
       reportError: vi.fn(),
@@ -219,6 +227,7 @@ describe("createRollingActivityCoordinator", () => {
       buildState(),
       buildSnapshot("2026-07-15T12:00:00.000Z"),
       {
+        ...noSnapshotRetry,
         plan,
         refreshSnapshot: () => okAsync(buildSnapshot("2026-07-15T12:01:00.000Z")),
         reportError: vi.fn(),
@@ -246,6 +255,7 @@ describe("createRollingActivityCoordinator", () => {
       buildState(),
       buildSnapshot("2026-07-15T12:00:00.000Z"),
       {
+        ...noSnapshotRetry,
         plan,
         refreshSnapshot: () => errAsync(refreshError),
         reportError,
@@ -262,6 +272,49 @@ describe("createRollingActivityCoordinator", () => {
     expect(coordinator.getState().reservations).toEqual([]);
   });
 
+  it("retries a transient snapshot failure before replanning", async () => {
+    const assignment = buildAssignment("Stan", "goal-copper");
+    const refreshError = new TestSnapshotError("refresh failed");
+    const refreshedSnapshot = buildSnapshot("2026-07-15T12:01:00.000Z");
+    const refreshSnapshot = vi
+      .fn<() => ResultAsync<CrewSnapshot, TestSnapshotError>>()
+      .mockReturnValueOnce(errAsync(refreshError))
+      .mockReturnValueOnce(okAsync(refreshedSnapshot));
+    const reportError = vi.fn();
+    const shouldRetrySnapshotFailure = vi.fn(() => true);
+    const waitBeforeSnapshotRetry = vi.fn(async () => undefined);
+    const plan = vi.fn<RollingActivityPlanner<TestActivityError, TestPlanError>>(
+      (_snapshot, state, previousOutcome) =>
+        previousOutcome === undefined
+          ? ok({ activities: [assignment], state })
+          : unchangedPlan(state),
+    );
+    const { completions, startActivity } = createStarter();
+    const coordinator = createRollingActivityCoordinator(
+      buildState(),
+      buildSnapshot("2026-07-15T12:00:00.000Z"),
+      {
+        plan,
+        refreshSnapshot,
+        reportError,
+        shouldRetrySnapshotFailure,
+        startActivity,
+        waitBeforeSnapshotRetry,
+      },
+    );
+    coordinator.start();
+
+    completions.get("Stan")?.resolve(completedOutcome("Stan", "goal-copper"));
+    await coordinator.waitForIdle();
+
+    expect(refreshSnapshot).toHaveBeenCalledTimes(2);
+    expect(shouldRetrySnapshotFailure).toHaveBeenCalledWith(refreshError);
+    expect(waitBeforeSnapshotRetry).toHaveBeenCalledTimes(1);
+    expect(reportError).toHaveBeenCalledWith(refreshError);
+    expect(plan).toHaveBeenCalledTimes(2);
+    expect(coordinator.getSnapshot()).toBe(refreshedSnapshot);
+  });
+
   it("does not report idle while an Activity is still running", async () => {
     const assignment = buildAssignment("Stan", "goal-copper");
     let planCalls = 0;
@@ -274,6 +327,7 @@ describe("createRollingActivityCoordinator", () => {
       buildState(),
       buildSnapshot("2026-07-15T12:00:00.000Z"),
       {
+        ...noSnapshotRetry,
         plan,
         refreshSnapshot: () => okAsync(buildSnapshot("2026-07-15T12:01:00.000Z")),
         reportError: vi.fn(),
@@ -313,6 +367,7 @@ describe("createRollingActivityCoordinator", () => {
       buildState(),
       buildSnapshot("2026-07-15T12:00:00.000Z"),
       {
+        ...noSnapshotRetry,
         plan,
         refreshSnapshot,
         reportError: vi.fn(),
@@ -349,6 +404,7 @@ describe("createRollingActivityCoordinator", () => {
       buildState(),
       buildSnapshot("2026-07-15T12:00:00.000Z"),
       {
+        ...noSnapshotRetry,
         plan,
         refreshSnapshot: () => okAsync(buildSnapshot("2026-07-15T12:01:00.000Z")),
         reportError,
@@ -373,6 +429,7 @@ describe("createRollingActivityCoordinator", () => {
       buildState(),
       buildSnapshot("2026-07-15T12:00:00.000Z"),
       {
+        ...noSnapshotRetry,
         plan: (_snapshot, state) => ok({ activities: [assignment], state }),
         refreshSnapshot: () => {
           throw refreshError;
@@ -397,6 +454,7 @@ describe("createRollingActivityCoordinator", () => {
       buildState(),
       buildSnapshot("2026-07-15T12:00:00.000Z"),
       {
+        ...noSnapshotRetry,
         plan: () => err(planError),
         refreshSnapshot: () => okAsync(buildSnapshot("2026-07-15T12:01:00.000Z")),
         reportError: vi.fn(),
