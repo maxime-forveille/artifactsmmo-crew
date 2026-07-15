@@ -200,6 +200,11 @@ Stryker runs in-place because the current TypeScript native-preview package is
 incompatible with Stryker's sandbox tsconfig rewriting. It creates a backup
 under `.stryker-tmp` and restores source files when complete.
 
+The Vitest runner creates one `stryker-setup-<worker>.js` file in the project
+root and can fail to remove every file when workers close concurrently. The
+package scripts use `scripts/runMutationTests.ts` to preserve concurrency while
+removing these runner artifacts after both successful and failed runs.
+
 Do not interrupt mutation testing unless necessary. If interrupted, inspect
 `.stryker-tmp` and the Git diff before continuing. HTML reports are written to
 `reports/mutation/` and are ignored by Git.
