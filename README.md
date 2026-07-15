@@ -14,7 +14,8 @@ state and schedules bounded Activities.
 small capability, deterministic tests, then live verification when needed.
 
 Current characters: Cartman, Stan, Kyle, Kenny, and Butters. Runtime assignments
-remain configurable in `tasks.json` during the orchestration migration.
+remain configurable through the `tasks.json` fallback during the orchestration
+migration.
 
 ## Quick start
 
@@ -85,8 +86,15 @@ model and migration plan.
 
 ## Runtime assignments
 
-`tasks.json` is a transitional human Adapter. It is validated with Valibot and
-reloaded every 10 seconds without restarting unchanged characters.
+The entrypoint starts configured crew orchestration when `orchestration.json`
+exists. The file contains an ordered `goals` array; every Goal must explicitly
+provide `id`, `itemCode`, `minimumBankQuantity`, `resourceCode`, and the
+`replenishBankItem` type. The bot validates the full configuration and resolves
+every resource from the catalog before starting any Activity.
+
+When `orchestration.json` is absent, `tasks.json` remains the transitional human
+Adapter. It is validated with Valibot and reloaded every 10 seconds without
+restarting unchanged characters.
 
 ```json
 {
@@ -97,8 +105,10 @@ reloaded every 10 seconds without restarting unchanged characters.
 ```
 
 See `tasks.example.json` and `src/bot/tasks/task.ts` for all current task
-variants. The orchestrator will progressively replace `autoHunt` and
-`autoFarm`; explicit human control will remain as a future one-shot override.
+variants. Do not create both files expecting them to merge:
+`orchestration.json` takes precedence. The orchestrator will progressively
+replace `autoHunt` and `autoFarm`; explicit human control will remain as a
+future one-shot override.
 
 ## Technology
 

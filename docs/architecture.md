@@ -216,22 +216,18 @@ forever.
 
 ## Manual control
 
-`tasks.json` remains the current human configuration Adapter while the
-orchestrator is built. The target is autonomous assignment with a temporary
-one-shot human override that takes precedence and then returns control to the
-orchestrator.
+`orchestration.json` is the opt-in crew assignment source. When present, the
+entrypoint validates its ordered Goals, resolves every resource, and starts the
+rolling orchestrator. Goal priority, bank thresholds, and resource codes must
+all be explicit; the Adapter supplies no defaults. The file remains ignored as
+account-specific runtime configuration.
 
-`utils/orchestrationConfig.ts` validates the separate future orchestration
-configuration with Valibot. Goal priority, bank thresholds, and resource codes
-must all be explicit; the Adapter neither supplies defaults nor copies
-resource-only fields into persistent orchestrator state. `orchestration.json`
-is account runtime configuration and remains ignored until the orchestrator is
-connected to the entrypoint.
-
-The assignment vocabulary currently lives in `utils/taskAssignments.ts` with
-Valibot parsing and filesystem loading. A later refactor should move bot-domain
-assignment types near orchestration while keeping JSON/filesystem concerns in
-the human Adapter.
+When `orchestration.json` is absent, `tasks.json` remains the transitional human
+Adapter and keeps its existing hot-reload behavior. `TaskAssignment` belongs to
+the transitional `tasks/` model; `utils/taskAssignments.ts` only validates and
+loads its JSON representation. The target is autonomous assignment with a
+temporary one-shot human override that takes precedence and then returns
+control to the orchestrator.
 
 ## Persistence
 
@@ -246,6 +242,4 @@ policy Interface.
   profession goals.
 - `combat.ts` mixes pure safety calculations with combat execution.
 - `activities/equipment.ts` still recursively decides how to acquire inputs.
-- `utils/taskAssignments.ts` mixes bot vocabulary, validation, and filesystem
-  loading.
 - `runForever.ts` encodes the task model that bounded Activities will replace.
