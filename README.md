@@ -801,7 +801,16 @@ per-character work, with the first observational slice now delivered:
    reuses `runFarmingCycle`, `runHuntingCycle`, and `craftItem`, limits data
    requests, and keeps decisions separate from game Actions. State stays
    in-memory first and may move to SQLite later without changing policy.
-4. Once proven, the orchestrator is expected to become the sole source of
+4. Activity scheduling is rolling, not a global barrier. Each character runs
+   at most one Activity; when one finishes, the runtime serializes that event,
+   refreshes the shared snapshot, and asks the orchestrator only for currently
+   idle characters. Activities still in flight continue uninterrupted and
+   remain in `OrchestratorState` as plain-data Reservations, so their intended
+   production/consumption participates in policy and work is not duplicated.
+   Simultaneous completions enter one decision queue rather than racing two
+   snapshots or policy transitions. Promises and `AbortController`s remain
+   runtime details, never persisted orchestration state.
+5. Once proven, the orchestrator is expected to become the sole source of
    assignments - `tasks.json` (the human-edited one) fades out as the bot's
    autonomy grows. One exception planned: a one-shot, explicit human override
    request that takes precedence over the orchestrator temporarily for a

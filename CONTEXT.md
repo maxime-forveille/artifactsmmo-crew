@@ -29,3 +29,8 @@ _Avoid_: Activity, task
 The decision module that combines a crew snapshot with persistent goals and
 proposes bounded activities; it never performs game actions directly.
 _Avoid_: Task runner, activity executor
+
+**Reservation**:
+A plain-data record of an activity already running for a character, including
+what it intends to produce or consume so another decision does not duplicate it.
+_Avoid_: Running promise, lock
