@@ -4,7 +4,7 @@ import { err, ok, ResultAsync } from "neverthrow";
 import { env } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
 import { API_BASE_URL } from "./constants.js";
-import { memoizeAsync } from "./memoize.js";
+import { memoizeAsync, memoizeAsyncWithTtl } from "./memoize.js";
 import { createRateLimiter, type RateLimitWindow } from "./rateLimiter.js";
 import type { components, paths } from "./schema.js";
 
@@ -103,6 +103,16 @@ const isDataRequest = (request: Request): boolean => request.method === "GET";
  */
 const SAFETY_MARGIN = 0.6;
 
+// Combat XP rates are only a target-selection heuristic; refreshing them
+// every two minutes keeps them useful without spending one GET per character
+// on every hunt cycle.
+const CHARACTER_LOG_CACHE_TTL_MS = 120_000;
+
+// Several concurrent decision paths can inspect the same bank state. A short
+// TTL collapses those reads, while deposit/withdraw calls invalidate it as
+// soon as they successfully change the bank.
+const BANK_ITEMS_CACHE_TTL_MS = 5_000;
+
 const withSafetyMargin = (windows: readonly RateLimitWindow[]): RateLimitWindow[] =>
   windows.map((window) => ({
     ...window,
@@ -150,8 +160,8 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
   // query every single task cycle, across all 5 characters, which was
   // eating heavily into the account's hourly GET rate limit for no benefit
   // (confirmed live: real 429s against the server's own "2000 per 1 hour"
-  // bucket). `getCharacter`, `getCharacterLogs`, and `getBankItems` are
-  // deliberately left uncached below - their data is genuinely dynamic.
+  // bucket). The genuinely dynamic logs and bank below use short TTL caches
+  // instead; character snapshots stay uncached.
   const cacheKey = (...args: unknown[]): string => JSON.stringify(args);
 
   const getMaps = memoizeAsync(
@@ -193,13 +203,25 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
     cacheKey,
   );
 
+  const cachedBankItems = memoizeAsyncWithTtl(
+    (query?: paths["/my/bank/items"]["get"]["parameters"]["query"]) =>
+      toResult(client.GET("/my/bank/items", { params: query === undefined ? {} : { query } })),
+    cacheKey,
+    BANK_ITEMS_CACHE_TTL_MS,
+  );
   const getBankItems = (query?: paths["/my/bank/items"]["get"]["parameters"]["query"]) =>
-    toResult(client.GET("/my/bank/items", { params: query === undefined ? {} : { query } }));
+    cachedBankItems(query);
 
+  const cachedCharacterLogs = memoizeAsyncWithTtl(
+    (name: string, query?: paths["/my/logs/{name}"]["get"]["parameters"]["query"]) =>
+      toResult(client.GET("/my/logs/{name}", { params: { path: { name }, query: query ?? {} } })),
+    cacheKey,
+    CHARACTER_LOG_CACHE_TTL_MS,
+  );
   const getCharacterLogs = (
     name: string,
     query?: paths["/my/logs/{name}"]["get"]["parameters"]["query"],
-  ) => toResult(client.GET("/my/logs/{name}", { params: { path: { name }, query: query ?? {} } }));
+  ) => cachedCharacterLogs(name, query);
 
   const moveCharacter = (name: string, destination: components["schemas"]["DestinationSchema"]) =>
     toResult(
@@ -265,7 +287,10 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
         body: items,
         params: { path: { name } },
       }),
-    );
+    ).map((response) => {
+      cachedBankItems.clear();
+      return response;
+    });
 
   const withdrawItems = (name: string, items: components["schemas"]["SimpleItemSchema"][]) =>
     toResult(
@@ -273,7 +298,10 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
         body: items,
         params: { path: { name } },
       }),
-    );
+    ).map((response) => {
+      cachedBankItems.clear();
+      return response;
+    });
 
   const depositGold = (name: string, quantity: number) =>
     toResult(

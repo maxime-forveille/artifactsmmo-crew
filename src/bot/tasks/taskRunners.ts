@@ -115,10 +115,16 @@ const equipIfFree = (
 // loop naturally chips away at the rest over subsequent cycles.
 const MAX_FILLER_CRAFT_BATCH = 5;
 
+// A profession block should trigger one bounded XP action, not one action
+// for every recipe the current bank happens to support. Running all recipes
+// multiplied bank reads, crafting actions, and cooldowns across all five
+// characters, creating real GET rate-limit pressure.
+const MAX_FILLER_CRAFT_RECIPES = 1;
+
 /**
- * Crafts a small batch of whatever's currently craftable from the bank's
- * surplus (see `findCraftableFromBankSurplus` and `MAX_FILLER_CRAFT_BATCH`),
- * purely for the profession XP - used as a filler activity when a
+ * Crafts a small batch of one item currently craftable from the bank's
+ * surplus (see `findCraftableFromBankSurplus`, `MAX_FILLER_CRAFT_BATCH`, and
+ * `MAX_FILLER_CRAFT_RECIPES`), purely for the profession XP - used as a filler activity when a
  * specific upgrade is blocked by `InsufficientCraftingLevelError`, so the
  * character makes some progress toward unlocking it instead of just
  * idling on the block. A no-op when nothing is currently craftable from
@@ -134,7 +140,7 @@ const craftFromBankSurplus = (
 ): ResultAsync<void, never> =>
   findCraftableFromBankSurplus(client, agent.getCharacter())
     .andThen((craftable) =>
-      craftable.reduce<ResultAsync<void, EquipmentError>>(
+      craftable.slice(0, MAX_FILLER_CRAFT_RECIPES).reduce<ResultAsync<void, EquipmentError>>(
         (acc, { craftableQuantity, itemCode }) =>
           acc.andThen(() => {
             const quantity = Math.min(craftableQuantity, MAX_FILLER_CRAFT_BATCH);

@@ -1088,6 +1088,16 @@ describe("runTask", () => {
         },
         type: "resource",
       });
+      const ironBar = buildItem({
+        code: "iron_bar",
+        craft: {
+          items: [{ code: "iron_ore", quantity: 10 }],
+          level: 1,
+          quantity: 1,
+          skill: "mining",
+        },
+        type: "resource",
+      });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [monster], page: 1, pages: 1, size: 50, total: 1 }),
       );
@@ -1113,6 +1123,9 @@ describe("runTask", () => {
         if (code === "copper_bar") {
           return okAsync({ data: copperBar });
         }
+        if (code === "iron_bar") {
+          return okAsync({ data: ironBar });
+        }
         if (code === "blocked_weapon") {
           return okAsync({ data: blockedWeapon });
         }
@@ -1123,16 +1136,19 @@ describe("runTask", () => {
       const getBankItems = vi.fn((query?: { item_code?: string }) => {
         if (query?.item_code === undefined) {
           return okAsync({
-            data: [{ code: "copper_ore", quantity: 1_560 }],
+            data: [
+              { code: "copper_ore", quantity: 1_560 },
+              { code: "iron_ore", quantity: 1_560 },
+            ],
             page: 1,
             pages: 1,
             size: 100,
-            total: 1,
+            total: 2,
           });
         }
-        if (query.item_code === "copper_ore") {
+        if (query.item_code === "copper_ore" || query.item_code === "iron_ore") {
           return okAsync({
-            data: [{ code: "copper_ore", quantity: 1_560 }],
+            data: [{ code: query.item_code, quantity: 1_560 }],
             page: 1,
             pages: 1,
             size: 50,
@@ -1144,6 +1160,9 @@ describe("runTask", () => {
       const getItemsForSurplus = vi.fn((query?: { craft_material?: string; type?: string }) => {
         if (query?.craft_material === "copper_ore") {
           return okAsync({ data: [copperBar], page: 1, pages: 1, size: 100, total: 1 });
+        }
+        if (query?.craft_material === "iron_ore") {
+          return okAsync({ data: [ironBar], page: 1, pages: 1, size: 100, total: 1 });
         }
         return getItems(query);
       });
@@ -1189,7 +1208,8 @@ describe("runTask", () => {
         });
       });
       const craft = vi.fn((_name: string, code: string, quantity = 1) => {
-        held.set("copper_ore", (held.get("copper_ore") ?? 0) - 10 * quantity);
+        const materialCode = code === "iron_bar" ? "iron_ore" : "copper_ore";
+        held.set(materialCode, (held.get(materialCode) ?? 0) - 10 * quantity);
         held.set(code, (held.get(code) ?? 0) + quantity);
         return okAsync({
           data: {
@@ -1230,6 +1250,7 @@ describe("runTask", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(craft).toHaveBeenCalledWith("Cartman", "copper_bar", 5);
       expect(craft).not.toHaveBeenCalledWith("Cartman", "copper_bar", 156);
+      expect(craft).not.toHaveBeenCalledWith("Cartman", "iron_bar", 5);
     });
   });
 });

@@ -38,3 +38,49 @@ export const memoizeAsync = <Args extends readonly unknown[], T, E>(
     return entry;
   };
 };
+
+type TtlMemoizedAsync<Args extends readonly unknown[], T, E> = ((
+  ...args: Args
+) => ResultAsync<T, E>) & {
+  clear: () => void;
+};
+
+/**
+ * Like `memoizeAsync`, but only reuses successful calls for `ttlMs`. It is
+ * intended for dynamic GET endpoints whose value can be slightly stale but
+ * must not be fetched every task cycle. `clear` is for callers that know an
+ * action has changed the remote state before the TTL elapses.
+ */
+export const memoizeAsyncWithTtl = <Args extends readonly unknown[], T, E>(
+  fn: (...args: Args) => ResultAsync<T, E>,
+  keyFor: (...args: Args) => string,
+  ttlMs: number,
+): TtlMemoizedAsync<Args, T, E> => {
+  const cache = new Map<string, { expiresAt: number; result: ResultAsync<T, E> }>();
+
+  const memoized = (...args: Args): ResultAsync<T, E> => {
+    const key = keyFor(...args);
+    const cached = cache.get(key);
+
+    if (cached !== undefined && cached.expiresAt > Date.now()) {
+      return cached.result;
+    }
+
+    const result = fn(...args);
+    cache.set(key, { expiresAt: Date.now() + ttlMs, result });
+    result.mapErr((error) => {
+      if (cache.get(key)?.result === result) {
+        cache.delete(key);
+      }
+      return error;
+    });
+
+    return result;
+  };
+
+  memoized.clear = () => {
+    cache.clear();
+  };
+
+  return memoized;
+};

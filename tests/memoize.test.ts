@@ -1,9 +1,13 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { memoizeAsync } from "../src/client/memoize.js";
+import { memoizeAsync, memoizeAsyncWithTtl } from "../src/client/memoize.js";
 
 const cacheKey = (...args: unknown[]): string => JSON.stringify(args);
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("memoizeAsync", () => {
   it("calls the wrapped function only once for repeated calls with the same arguments", async () => {
@@ -61,5 +65,35 @@ describe("memoizeAsync", () => {
 
     expect(fn).toHaveBeenCalledTimes(2);
     expect(third.isOk() && third.value).toBe("data");
+  });
+});
+
+describe("memoizeAsyncWithTtl", () => {
+  it("reuses a successful result until its TTL expires", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
+
+    const fn = vi.fn((code: string) => okAsync(`data for ${code}`));
+    const memoized = memoizeAsyncWithTtl(fn, cacheKey, 10_000);
+
+    await memoized("copper_ore");
+    await memoized("copper_ore");
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(10_000);
+    await memoized("copper_ore");
+
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("forgets every cached result when cleared", async () => {
+    const fn = vi.fn((code: string) => okAsync(`data for ${code}`));
+    const memoized = memoizeAsyncWithTtl(fn, cacheKey, 10_000);
+
+    await memoized("copper_ore");
+    memoized.clear();
+    await memoized("copper_ore");
+
+    expect(fn).toHaveBeenCalledTimes(2);
   });
 });

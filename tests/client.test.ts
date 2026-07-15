@@ -139,4 +139,45 @@ describe("createArtifactsClient", () => {
     expect(result.isOk()).toBe(true);
     expect(result._unsafeUnwrap().data).toEqual([{ map_id: 42, name: "Copper Rocks", x: 2, y: 1 }]);
   });
+
+  it("shares recent character logs instead of refetching them for every decision cycle", async () => {
+    let requestCount = 0;
+
+    server.use(
+      http.get("https://api.artifactsmmo.com/my/logs/:name", () => {
+        requestCount += 1;
+        return HttpResponse.json({ data: [], page: 1, pages: 1, size: 100, total: 0 });
+      }),
+    );
+
+    const client = createArtifactsClient("test-token");
+
+    await client.getCharacterLogs("Cartman", { size: 100 });
+    await client.getCharacterLogs("Cartman", { size: 100 });
+
+    expect(requestCount).toBe(1);
+  });
+
+  it("invalidates cached bank data after a successful bank deposit", async () => {
+    let bankRequestCount = 0;
+
+    server.use(
+      http.get("https://api.artifactsmmo.com/my/bank/items", () => {
+        bankRequestCount += 1;
+        return HttpResponse.json({ data: [], page: 1, pages: 1, size: 50, total: 0 });
+      }),
+      http.post("https://api.artifactsmmo.com/my/:name/action/bank/deposit/item", () =>
+        HttpResponse.json({ data: {} }),
+      ),
+    );
+
+    const client = createArtifactsClient("test-token");
+
+    await client.getBankItems({ item_code: "copper_ore" });
+    await client.getBankItems({ item_code: "copper_ore" });
+    await client.depositItems("Cartman", [{ code: "copper_ore", quantity: 1 }]);
+    await client.getBankItems({ item_code: "copper_ore" });
+
+    expect(bankRequestCount).toBe(2);
+  });
 });
