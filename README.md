@@ -795,12 +795,17 @@ per-character work, with the first observational slice now delivered:
 3. The target decision model is a pure transition from `CrewSnapshot` plus
    `OrchestratorState` to proposed Activities plus the next state. A Goal
    persists across several Activities; an Activity performs one complete
-   operational cycle before the crew is observed again. Initially that means
-   resource → inventory full → bank for farming, monster → inventory full →
-   bank for hunting, and one targeted craft for profession progress. This
-   reuses `runFarmingCycle`, `runHuntingCycle`, and `craftItem`, limits data
-   requests, and keeps decisions separate from game Actions. State stays
-   in-memory first and may move to SQLite later without changing policy.
+   operational cycle before the crew is observed again. The initial Activity
+   Interface has four variants: `farmResource`, `huntMonster`, `craftItem`, and
+   `equipItem`. Farming and hunting run through inventory-full and bank
+   checkpoints; crafting and equipping act on one explicit target. Movement,
+   gathering, fighting, resting, and bank operations remain internal Actions,
+   not scheduler-visible Activities. `craftItem` and `equipItem` ultimately
+   stop acquiring missing inputs recursively: they return a Blocker and let
+   policy schedule prerequisite work while preserving the Goal. This reuses
+   the existing bounded cycles during migration, limits data requests, and
+   separates decisions from game Actions. State stays in-memory first and may
+   move to SQLite later without changing policy.
 4. Activity scheduling is rolling, not a global barrier. Each character runs
    at most one Activity; when one finishes, the runtime serializes that event,
    refreshes the shared snapshot, and asks the orchestrator only for currently
