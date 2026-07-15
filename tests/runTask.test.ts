@@ -1049,8 +1049,9 @@ describe("runTask", () => {
       );
     });
 
-    it("crafts only a small capped batch from bank surplus for profession xp, not the full theoretical amount", async () => {
+    it("keeps crafting bounded recipes for the exact blocked profession until its target level", async () => {
       const held = new Map<string, number>();
+      let weaponcraftingLevel = 1;
       const buildLeveledCharacter = (): CharacterSnapshot =>
         buildCombatCharacter({
           attack_earth: 20,
@@ -1065,38 +1066,28 @@ describe("runTask", () => {
           max_hp: 170,
           mining_level: 5,
           weapon_slot: "",
-          weaponcrafting_level: 0,
+          weaponcrafting_level: weaponcraftingLevel,
         });
       const monster = buildMonster({ code: "chicken", hp: 60, level: 1 });
       const blockedWeapon = buildItem({
         code: "blocked_weapon",
         craft: {
           items: [{ code: "iron_ore", quantity: 1 }],
-          level: 5,
+          level: 3,
           quantity: 1,
           skill: "weaponcrafting",
         },
         type: "weapon",
       });
-      const copperBar = buildItem({
-        code: "copper_bar",
+      const practiceDagger = buildItem({
+        code: "practice_dagger",
         craft: {
-          items: [{ code: "copper_ore", quantity: 10 }],
+          items: [{ code: "copper_bar", quantity: 1 }],
           level: 1,
           quantity: 1,
-          skill: "mining",
+          skill: "weaponcrafting",
         },
-        type: "resource",
-      });
-      const ironBar = buildItem({
-        code: "iron_bar",
-        craft: {
-          items: [{ code: "iron_ore", quantity: 10 }],
-          level: 1,
-          quantity: 1,
-          skill: "mining",
-        },
-        type: "resource",
+        type: "weapon",
       });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [monster], page: 1, pages: 1, size: 50, total: 1 }),
@@ -1120,11 +1111,8 @@ describe("runTask", () => {
         }),
       );
       const getItem = vi.fn((code: string) => {
-        if (code === "copper_bar") {
-          return okAsync({ data: copperBar });
-        }
-        if (code === "iron_bar") {
-          return okAsync({ data: ironBar });
+        if (code === "practice_dagger") {
+          return okAsync({ data: practiceDagger });
         }
         if (code === "blocked_weapon") {
           return okAsync({ data: blockedWeapon });
@@ -1133,39 +1121,23 @@ describe("runTask", () => {
         // material with no craft recipe of its own.
         return okAsync({ data: buildItem({ code }) });
       });
-      const getBankItems = vi.fn((query?: { item_code?: string }) => {
-        if (query?.item_code === undefined) {
-          return okAsync({
-            data: [
-              { code: "copper_ore", quantity: 1_560 },
-              { code: "iron_ore", quantity: 1_560 },
-            ],
-            page: 1,
-            pages: 1,
-            size: 100,
-            total: 2,
-          });
-        }
-        if (query.item_code === "copper_ore" || query.item_code === "iron_ore") {
-          return okAsync({
-            data: [{ code: query.item_code, quantity: 1_560 }],
-            page: 1,
-            pages: 1,
-            size: 50,
-            total: 1,
-          });
-        }
-        return okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 });
-      });
-      const getItemsForSurplus = vi.fn((query?: { craft_material?: string; type?: string }) => {
-        if (query?.craft_material === "copper_ore") {
-          return okAsync({ data: [copperBar], page: 1, pages: 1, size: 100, total: 1 });
-        }
-        if (query?.craft_material === "iron_ore") {
-          return okAsync({ data: [ironBar], page: 1, pages: 1, size: 100, total: 1 });
-        }
-        return getItems(query);
-      });
+      const getBankItems = vi.fn((query?: { item_code?: string }) =>
+        okAsync({
+          data:
+            query?.item_code === undefined || query.item_code === "copper_bar"
+              ? [{ code: "copper_bar", quantity: 10 }]
+              : [],
+          page: 1,
+          pages: 1,
+          size: 50,
+          total: query?.item_code === undefined || query.item_code === "copper_bar" ? 1 : 0,
+        }),
+      );
+      const getItemsForProgress = vi.fn((query?: { craft_skill?: string; type?: string }) =>
+        query?.craft_skill === "weaponcrafting"
+          ? okAsync({ data: [practiceDagger], page: 1, pages: 1, size: 100, total: 1 })
+          : getItems(query),
+      );
       const getResources = vi.fn(() =>
         okAsync({
           data: [buildResource({ code: "iron_rocks" })],
@@ -1208,9 +1180,11 @@ describe("runTask", () => {
         });
       });
       const craft = vi.fn((_name: string, code: string, quantity = 1) => {
-        const materialCode = code === "iron_bar" ? "iron_ore" : "copper_ore";
-        held.set(materialCode, (held.get(materialCode) ?? 0) - 10 * quantity);
+        held.set("copper_bar", (held.get("copper_bar") ?? 0) - quantity);
         held.set(code, (held.get(code) ?? 0) + quantity);
+        if (code === "practice_dagger") {
+          weaponcraftingLevel += 1;
+        }
         return okAsync({
           data: {
             character: buildLeveledCharacter(),
@@ -1232,11 +1206,11 @@ describe("runTask", () => {
               max_hp: 170,
               mining_level: 5,
               weapon_slot: "",
-              weaponcrafting_level: 0,
+              weaponcrafting_level: weaponcraftingLevel,
             }),
           }),
         getItem,
-        getItems: getItemsForSurplus,
+        getItems: getItemsForProgress,
         getMaps,
         getMonsters,
         getResources,
@@ -1247,10 +1221,10 @@ describe("runTask", () => {
 
       void runTask(client, "Cartman", { type: "autoHunt" });
 
-      await vi.advanceTimersByTimeAsync(0);
-      expect(craft).toHaveBeenCalledWith("Cartman", "copper_bar", 5);
-      expect(craft).not.toHaveBeenCalledWith("Cartman", "copper_bar", 156);
-      expect(craft).not.toHaveBeenCalledWith("Cartman", "iron_bar", 5);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(craft).toHaveBeenCalledTimes(2);
+      expect(craft).toHaveBeenNthCalledWith(1, "Cartman", "practice_dagger", 1);
+      expect(craft).toHaveBeenNthCalledWith(2, "Cartman", "practice_dagger", 1);
     });
   });
 });

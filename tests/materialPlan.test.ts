@@ -1,7 +1,11 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { findCraftableFromBankSurplus, materialsNeededFor } from "../src/bot/materialPlan.js";
+import {
+  findCraftableFromBankSurplus,
+  materialsNeededFor,
+  planProfessionProgress,
+} from "../src/bot/materialPlan.js";
 import { ArtifactsApiError } from "../src/client/index.js";
 import type { components } from "../src/client/schema.js";
 
@@ -30,7 +34,11 @@ const buildCharacter = (
 const buildItem = (overrides: Partial<Item>): Item => ({ ...({} as Item), ...overrides });
 const buildItemResponse = (item: Item): ItemResponse => ({ data: item });
 
-const buildResource = (code: string): Resource => ({ ...({} as Resource), code });
+const buildResource = (code: string, overrides: Partial<Resource> = {}): Resource => ({
+  ...({} as Resource),
+  code,
+  ...overrides,
+});
 const buildResourcePage = (data: Resource[]): ResourcePage => ({
   data,
   page: 1,
@@ -234,6 +242,166 @@ describe("materialsNeededFor", () => {
 
     expect(result.isErr() && result.error).toBe(apiError);
     expect(getMonsters).not.toHaveBeenCalled();
+  });
+});
+
+describe("planProfessionProgress", () => {
+  it("selects a recipe for the exact blocked profession", async () => {
+    const character = buildCharacter([], { mining_level: 5, weaponcrafting_level: 1 });
+    const woodenStaff = buildItem({
+      code: "wooden_staff",
+      craft: {
+        items: [{ code: "ash_wood", quantity: 2 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const unrelatedBar = buildItem({
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_ore", quantity: 2 }],
+        level: 1,
+        quantity: 1,
+        skill: "mining",
+      },
+    });
+    const getItems = vi.fn(() => okAsync(buildItemPage([unrelatedBar, woodenStaff])));
+    const getItem = vi.fn((code: string) => okAsync(buildItemResponse(buildItem({ code }))));
+    const getBankItems = vi.fn((query?: { item_code?: string }) =>
+      okAsync(
+        buildBankItemsPage(
+          query?.item_code === undefined || query.item_code === "ash_wood"
+            ? [{ code: "ash_wood", quantity: 2 }]
+            : [],
+        ),
+      ),
+    );
+
+    const result = await planProfessionProgress(
+      {
+        getBankItems,
+        getItem,
+        getItems,
+        getMonster: vi.fn(),
+        getMonsters: noMonsters(),
+        getResource: vi.fn(),
+        getResources: noResources(),
+      },
+      character,
+      { skill: "weaponcrafting", targetLevel: 5 },
+    );
+
+    expect(getItems).toHaveBeenCalledWith({ craft_skill: "weaponcrafting", size: 100 });
+    expect(result.isOk() && result.value).toEqual({
+      craftQuantity: 1,
+      itemCode: "wooden_staff",
+      missingMaterials: [],
+      recipeLevel: 1,
+      skill: "weaponcrafting",
+      targetLevel: 5,
+    });
+  });
+
+  it("chooses the eligible recipe with the fewest missing safe materials", async () => {
+    const character = buildCharacter([], { weaponcrafting_level: 1, woodcutting_level: 1 });
+    const expensive = buildItem({
+      code: "expensive_staff",
+      craft: {
+        items: [{ code: "ash_wood", quantity: 4 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const cheap = buildItem({
+      code: "cheap_staff",
+      craft: {
+        items: [{ code: "ash_wood", quantity: 2 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const getItems = vi.fn(() => okAsync(buildItemPage([expensive, cheap])));
+    const getItem = vi.fn((code: string) => okAsync(buildItemResponse(buildItem({ code }))));
+    const ashTree = buildResource("ash_tree", { level: 1, skill: "woodcutting" });
+    const getResource = vi.fn(() => okAsync({ data: ashTree }));
+    const getResources = vi.fn(() => okAsync(buildResourcePage([ashTree])));
+
+    const result = await planProfessionProgress(
+      {
+        getBankItems: emptyBank(),
+        getItem,
+        getItems,
+        getMonster: vi.fn(),
+        getMonsters: noMonsters(),
+        getResource,
+        getResources,
+      },
+      character,
+      { skill: "weaponcrafting", targetLevel: 5 },
+    );
+
+    expect(result.isOk() && result.value?.itemCode).toBe("cheap_staff");
+    expect(result.isOk() && result.value?.missingMaterials).toEqual([
+      {
+        itemCode: "ash_wood",
+        missingQuantity: 2,
+        source: { resourceCode: "ash_tree", type: "gather" },
+      },
+    ]);
+  });
+
+  it("excludes a recipe whose gathering source is above the character's skill level", async () => {
+    const character = buildCharacter([], { weaponcrafting_level: 1, woodcutting_level: 1 });
+    const woodenStaff = buildItem({
+      code: "wooden_staff",
+      craft: {
+        items: [{ code: "spruce_wood", quantity: 2 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const spruceTree = buildResource("spruce_tree", { level: 5, skill: "woodcutting" });
+
+    const result = await planProfessionProgress(
+      {
+        getBankItems: emptyBank(),
+        getItem: vi.fn((code: string) => okAsync(buildItemResponse(buildItem({ code })))),
+        getItems: vi.fn(() => okAsync(buildItemPage([woodenStaff]))),
+        getMonster: vi.fn(),
+        getMonsters: noMonsters(),
+        getResource: vi.fn(() => okAsync({ data: spruceTree })),
+        getResources: vi.fn(() => okAsync(buildResourcePage([spruceTree]))),
+      },
+      character,
+      { skill: "weaponcrafting", targetLevel: 5 },
+    );
+
+    expect(result.isOk() && result.value).toBeUndefined();
+  });
+
+  it("returns no plan once the target profession level is reached", async () => {
+    const getItems = vi.fn();
+
+    const result = await planProfessionProgress(
+      {
+        getBankItems: emptyBank(),
+        getItem: vi.fn(),
+        getItems,
+        getMonster: vi.fn(),
+        getMonsters: noMonsters(),
+        getResource: vi.fn(),
+        getResources: noResources(),
+      },
+      buildCharacter([], { weaponcrafting_level: 5 }),
+      { skill: "weaponcrafting", targetLevel: 5 },
+    );
+
+    expect(result.isOk() && result.value).toBeUndefined();
+    expect(getItems).not.toHaveBeenCalled();
   });
 });
 

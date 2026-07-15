@@ -51,6 +51,13 @@ export class UnsafeMonsterError extends Error {
   }
 }
 
+export class NotCraftableItemError extends Error {
+  constructor(public readonly itemCode: string) {
+    super(`Item "${itemCode}" has no crafting recipe`);
+    this.name = "NotCraftableItemError";
+  }
+}
+
 export class InsufficientCraftingLevelError extends Error {
   constructor(
     public readonly itemCode: string,
@@ -71,6 +78,7 @@ export type EquipmentError =
   | InventoryFullError
   | LocationNotFoundError
   | MonsterNotFoundError
+  | NotCraftableItemError
   | ResourceNotFoundError
   | UnsafeMonsterError
   | UnsupportedEquipSlotError;
@@ -265,6 +273,47 @@ const reclaimEquippedIfAvailable = (
   return agent.unequip([{ quantity: 1, slot }]).map(() => undefined);
 };
 
+const craftItemFromDefinition = (
+  client: EquipmentClient,
+  agent: EquipmentAgent,
+  item: Item,
+  craftQuantity: number,
+): ResultAsync<void, EquipmentError> => {
+  const craftSkill = item.craft?.skill;
+
+  if (craftSkill === undefined) {
+    return errAsync(new NotCraftableItemError(item.code));
+  }
+
+  const currentLevel = craftSkillLevel(agent.getCharacter(), craftSkill);
+  const requiredLevel = item.craft?.level ?? 0;
+
+  if (currentLevel < requiredLevel) {
+    return errAsync(
+      new InsufficientCraftingLevelError(item.code, craftSkill, requiredLevel, currentLevel),
+    );
+  }
+
+  return (item.craft?.items ?? [])
+    .reduce<ResultAsync<void, EquipmentError>>(
+      (acc, material) =>
+        acc.andThen(() =>
+          ensureHeld(client, agent, material.code, material.quantity * craftQuantity),
+        ),
+      okAsync(undefined),
+    )
+    .andThen(() => resolveLocation(client, "workshop", craftSkill))
+    .andThen((workshopMap) => agent.moveTo(workshopMap.map_id))
+    .andThen(() => {
+      logger.info(
+        { character: agent.getCharacter().name, item: item.code, quantity: craftQuantity },
+        `${agent.getCharacter().name}: crafting ${craftQuantity}x ${item.code}`,
+      );
+      return agent.craft(item.code, craftQuantity);
+    })
+    .map(() => undefined);
+};
+
 /**
  * Same as `ensureHeld`, but for when the item's data has already been
  * fetched (e.g. by the caller, to avoid an extra `getItem` round-trip for
@@ -293,44 +342,10 @@ const ensureHeldItem = (
       }
 
       if (item.craft?.skill !== undefined) {
-        const craftSkill = item.craft.skill;
-        const requiredLevel = item.craft.level ?? 0;
-        const currentLevel = craftSkillLevel(agent.getCharacter(), craftSkill);
-
-        // Checked before gathering a single material: attempting the craft
-        // anyway would fail at the very last step regardless, after already
-        // paying for whatever materials it needed - found live, right after
-        // fixing the similar isSafeToFight gap (see UnsafeMonsterError):
-        // "a known source exists" still doesn't mean "this is actually
-        // usable right now".
-        if (currentLevel < requiredLevel) {
-          return errAsync(
-            new InsufficientCraftingLevelError(itemCode, craftSkill, requiredLevel, currentLevel),
-          );
-        }
-
         const craftYield = item.craft.quantity ?? 1;
         const craftsNeeded = Math.ceil(stillMissing / craftYield);
-        const materials = item.craft.items ?? [];
 
-        return materials
-          .reduce<ResultAsync<void, EquipmentError>>(
-            (acc, material) =>
-              acc.andThen(() =>
-                ensureHeld(client, agent, material.code, material.quantity * craftsNeeded),
-              ),
-            okAsync(undefined),
-          )
-          .andThen(() => resolveLocation(client, "workshop", craftSkill))
-          .andThen((workshopMap) => agent.moveTo(workshopMap.map_id))
-          .andThen(() => {
-            logger.info(
-              { character: agent.getCharacter().name, item: itemCode, quantity: craftsNeeded },
-              `${agent.getCharacter().name}: crafting ${craftsNeeded}x ${itemCode}`,
-            );
-            return agent.craft(itemCode, craftsNeeded);
-          })
-          .map(() => undefined);
+        return craftItemFromDefinition(client, agent, item, craftsNeeded);
       }
 
       return findResourceForDrop(client, itemCode)
@@ -394,6 +409,22 @@ export const ensureHeld = (
     : client
         .getItem(itemCode)
         .andThen((response) => ensureHeldItem(client, agent, response.data, quantity));
+
+/**
+ * Performs exactly `craftQuantity` crafts of `itemCode`, obtaining its
+ * materials recursively first. Unlike `ensureHeld`, this never withdraws an
+ * already-crafted copy of the target item from the bank: the purpose is to
+ * execute the craft action itself and gain profession XP.
+ */
+export const craftItem = (
+  client: EquipmentClient,
+  agent: EquipmentAgent,
+  itemCode: string,
+  craftQuantity: number,
+): ResultAsync<void, EquipmentError> =>
+  client
+    .getItem(itemCode)
+    .andThen((response) => craftItemFromDefinition(client, agent, response.data, craftQuantity));
 
 /**
  * Crafts `itemCode` (gathering/crafting whatever materials are missing

@@ -2,8 +2,9 @@ import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 
 import type { ArtifactsApiError, ArtifactsClient } from "../client/index.js";
 import type { components } from "../client/schema.js";
+import { isSafeToFight } from "./combat.js";
 import { heldQuantity } from "./inventory.js";
-import { craftSkillLevel } from "./progression.js";
+import { craftSkillLevel, skillLevel } from "./progression.js";
 import {
   findMonsterForDrop,
   findResourceForDrop,
@@ -20,6 +21,8 @@ type MaterialPlanClient = Pick<
   "getBankItems" | "getItem" | "getMonsters" | "getResources"
 >;
 type CraftableFromSurplusClient = Pick<ArtifactsClient, "getBankItems" | "getItems">;
+type ProfessionProgressClient = MaterialPlanClient &
+  Pick<ArtifactsClient, "getItems" | "getMonster" | "getResource">;
 
 /** Where a still-missing raw material could come from, if anywhere known. */
 export type MaterialSource =
@@ -165,6 +168,20 @@ export type CraftableFromSurplus = {
   readonly skill: CraftSkill;
 };
 
+export type ProfessionGoal = {
+  readonly skill: CraftSkill;
+  readonly targetLevel: number;
+};
+
+export type ProfessionProgressPlan = {
+  readonly craftQuantity: number;
+  readonly itemCode: string;
+  readonly missingMaterials: readonly MissingMaterial[];
+  readonly recipeLevel: number;
+  readonly skill: CraftSkill;
+  readonly targetLevel: number;
+};
+
 /** How many units of `itemCode` are available right now, counting both inventory and bank. */
 const availableQuantity = (
   client: Pick<MaterialPlanClient, "getBankItems">,
@@ -270,3 +287,159 @@ export const findCraftableFromBankSurplus = (
         );
       });
   });
+
+const materialsNeededForCraft = (
+  client: MaterialPlanClient,
+  character: Character,
+  item: Item,
+): ResultAsync<readonly MissingMaterial[], ArtifactsApiError> =>
+  (item.craft?.items ?? []).reduce<ResultAsync<readonly MissingMaterial[], ArtifactsApiError>>(
+    (acc, material) =>
+      acc.andThen((soFar) =>
+        materialsNeededFor(client, character, material.code, material.quantity).map(
+          (missingMaterials) => [...soFar, ...missingMaterials],
+        ),
+      ),
+    okAsync([]),
+  );
+
+const hasOnlyEligibleKnownSources = (
+  client: Pick<ProfessionProgressClient, "getMonster" | "getResource">,
+  character: Character,
+  missingMaterials: readonly MissingMaterial[],
+): ResultAsync<boolean, ArtifactsApiError> => {
+  if (missingMaterials.some((material) => material.source.type === "unknown")) {
+    return okAsync(false);
+  }
+
+  const resourceCodes = [
+    ...new Set(
+      missingMaterials.flatMap((material) =>
+        material.source.type === "gather" ? [material.source.resourceCode] : [],
+      ),
+    ),
+  ];
+  const monsterCodes = [
+    ...new Set(
+      missingMaterials.flatMap((material) =>
+        material.source.type === "hunt" ? [material.source.monsterCode] : [],
+      ),
+    ),
+  ];
+
+  return resourceCodes
+    .reduce<ResultAsync<boolean, ArtifactsApiError>>(
+      (acc, resourceCode) =>
+        acc.andThen((isEligible) =>
+          isEligible
+            ? client
+                .getResource(resourceCode)
+                .map(
+                  (response) => skillLevel(character, response.data.skill) >= response.data.level,
+                )
+            : okAsync(false),
+        ),
+      okAsync(true),
+    )
+    .andThen((areResourcesEligible) =>
+      areResourcesEligible
+        ? monsterCodes.reduce<ResultAsync<boolean, ArtifactsApiError>>(
+            (acc, monsterCode) =>
+              acc.andThen((isSafe) =>
+                isSafe
+                  ? client
+                      .getMonster(monsterCode)
+                      .map((response) => isSafeToFight(character, response.data))
+                  : okAsync(false),
+              ),
+            okAsync(true),
+          )
+        : okAsync(false),
+    );
+};
+
+const missingMaterialCost = (plan: ProfessionProgressPlan): number =>
+  plan.missingMaterials.reduce((total, material) => total + material.missingQuantity, 0);
+
+/**
+ * Chooses one bounded craft that progresses `goal.skill`. Recipes requiring a
+ * higher profession level are excluded. Recipes fully covered by inventory or
+ * bank are preferred; otherwise the cheapest recipe whose missing materials
+ * all have known, safe sources wins. Recipe level is only a tie-breaker until
+ * observed crafting XP rates exist.
+ */
+export const planProfessionProgress = (
+  client: ProfessionProgressClient,
+  character: Character,
+  goal: ProfessionGoal,
+): ResultAsync<ProfessionProgressPlan | undefined, ArtifactsApiError> => {
+  const currentLevel = craftSkillLevel(character, goal.skill);
+
+  if (currentLevel >= goal.targetLevel) {
+    return okAsync(undefined);
+  }
+
+  return client.getBankItems({ size: 100 }).andThen((bankPage) =>
+    client.getItems({ craft_skill: goal.skill, size: 100 }).andThen((page) => {
+      const snapshotClient: MaterialPlanClient = {
+        getBankItems: (query) => {
+          const data =
+            query?.item_code === undefined
+              ? bankPage.data
+              : bankPage.data.filter((item) => item.code === query.item_code);
+          return okAsync({ ...bankPage, data, total: data.length });
+        },
+        getItem: client.getItem,
+        getMonsters: client.getMonsters,
+        getResources: client.getResources,
+      };
+      const eligible = page.data.filter(
+        (item): item is Item & { craft: NonNullable<Item["craft"]> & { level: number } } =>
+          item.craft?.skill === goal.skill &&
+          item.craft.level !== undefined &&
+          item.craft.level <= currentLevel &&
+          (item.craft.items?.length ?? 0) > 0,
+      );
+
+      return eligible
+        .reduce<ResultAsync<readonly ProfessionProgressPlan[], ArtifactsApiError>>(
+          (acc, item) =>
+            acc.andThen((plans) =>
+              materialsNeededForCraft(snapshotClient, character, item).andThen((missingMaterials) =>
+                hasOnlyEligibleKnownSources(client, character, missingMaterials).map((isUsable) =>
+                  isUsable
+                    ? [
+                        ...plans,
+                        {
+                          craftQuantity: 1,
+                          itemCode: item.code,
+                          missingMaterials,
+                          recipeLevel: item.craft.level,
+                          skill: goal.skill,
+                          targetLevel: goal.targetLevel,
+                        },
+                      ]
+                    : plans,
+                ),
+              ),
+            ),
+          okAsync([]),
+        )
+        .map(
+          (plans) =>
+            [...plans].sort((left, right) => {
+              const costDifference = missingMaterialCost(left) - missingMaterialCost(right);
+
+              if (costDifference !== 0) {
+                return costDifference;
+              }
+
+              const levelDifference = right.recipeLevel - left.recipeLevel;
+              return levelDifference !== 0
+                ? levelDifference
+                : left.itemCode.localeCompare(right.itemCode);
+            })[0],
+        );
+    }),
+  );
+};

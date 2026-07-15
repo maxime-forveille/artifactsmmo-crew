@@ -11,8 +11,11 @@ import {
   SUPPORTED_COMBAT_SLOTS,
   type SupportedCombatSlot,
 } from "../gear.js";
-import { heldQuantity } from "../inventory.js";
-import { findCraftableFromBankSurplus, materialsNeededFor } from "../materialPlan.js";
+import {
+  materialsNeededFor,
+  planProfessionProgress,
+  type ProfessionGoal,
+} from "../materialPlan.js";
 import {
   craftSkillLevel,
   findNextFarmableResource,
@@ -21,8 +24,7 @@ import {
 } from "../progression.js";
 import {
   craftAndEquip,
-  ensureHeld,
-  type EquipmentError,
+  craftItem,
   InsufficientCraftingLevelError,
 } from "../strategies/equipment.js";
 import { runFarmingCycle } from "../strategies/farming.js";
@@ -99,69 +101,47 @@ const equipIfFree = (
       return okAsync(undefined);
     });
 
-// A filler craft is meant to make *some* progress toward profession XP
-// each cycle, not to bulk-produce everything the bank could theoretically
-// support - findCraftableFromBankSurplus reports the full theoretical
-// amount craftable from the entire bank surplus, which can vastly exceed
-// what fits in the character's inventory at once (found live: a bank
-// holding enough copper_ore for 156 copper_bar, needing ~10 ore each,
-// tried to withdraw ~1,560 copper_ore in one go and failed with
-// InventoryFullError/a real 497 - inventory_max_items is nowhere near
-// that). Kept deliberately small (not just "whatever fits"): this cap
-// only bounds the number of *crafts* attempted, not each recipe's own
-// material-to-output ratio (unknown to this caller), so a small number
-// leaves headroom for recipes that need several raw materials per unit
-// crafted, without needing to know the exact ratio ahead of time. The
-// loop naturally chips away at the rest over subsequent cycles.
-const MAX_FILLER_CRAFT_BATCH = 5;
-
-// A profession block should trigger one bounded XP action, not one action
-// for every recipe the current bank happens to support. Running all recipes
-// multiplied bank reads, crafting actions, and cooldowns across all five
-// characters, creating real GET rate-limit pressure.
-const MAX_FILLER_CRAFT_RECIPES = 1;
-
 /**
- * Crafts a small batch of one item currently craftable from the bank's
- * surplus (see `findCraftableFromBankSurplus`, `MAX_FILLER_CRAFT_BATCH`, and
- * `MAX_FILLER_CRAFT_RECIPES`), purely for the profession XP - used as a filler activity when a
- * specific upgrade is blocked by `InsufficientCraftingLevelError`, so the
- * character makes some progress toward unlocking it instead of just
- * idling on the block. A no-op when nothing is currently craftable from
- * surplus (falls back to hunting as normal; it'll be retried on the next
- * check). Uses `ensureHeld` rather than `craftAndEquip` since filler
- * items aren't necessarily equippable (e.g. cooking output). Failures are
- * logged and swallowed, same as every other auto-equip path.
+ * Executes one bounded craft toward `goal`, using a recipe selected by the
+ * read-only profession planner. Returns `false` when no safe, eligible recipe
+ * is currently available so the caller can fall back to hunting.
  */
-const craftFromBankSurplus = (
+const progressProfessionGoal = (
   client: ArtifactsClient,
   characterName: string,
   agent: CharacterAgent,
-): ResultAsync<void, never> =>
-  findCraftableFromBankSurplus(client, agent.getCharacter())
-    .andThen((craftable) =>
-      craftable.slice(0, MAX_FILLER_CRAFT_RECIPES).reduce<ResultAsync<void, EquipmentError>>(
-        (acc, { craftableQuantity, itemCode }) =>
-          acc.andThen(() => {
-            const quantity = Math.min(craftableQuantity, MAX_FILLER_CRAFT_BATCH);
+  goal: ProfessionGoal,
+): ResultAsync<boolean, never> =>
+  planProfessionProgress(client, agent.getCharacter(), goal)
+    .andThen((plan) => {
+      if (plan === undefined) {
+        logger.info(
+          { character: characterName, skill: goal.skill, targetLevel: goal.targetLevel },
+          `${characterName}: no safe ${goal.skill} craft available for profession progress, falling back to hunting`,
+        );
+        return okAsync(false);
+      }
 
-            logger.info(
-              { character: characterName, item: itemCode, quantity },
-              `${characterName}: crafting ${quantity}x ${itemCode} from bank surplus for profession xp`,
-            );
-            return ensureHeld(
-              client,
-              agent,
-              itemCode,
-              heldQuantity(agent.getCharacter(), itemCode) + quantity,
-            );
-          }),
-        okAsync(undefined),
-      ),
-    )
+      logger.info(
+        {
+          character: characterName,
+          item: plan.itemCode,
+          missing: plan.missingMaterials,
+          quantity: plan.craftQuantity,
+          skill: goal.skill,
+          targetLevel: goal.targetLevel,
+        },
+        `${characterName}: progressing ${goal.skill} toward level ${goal.targetLevel} by crafting ${plan.itemCode}`,
+      );
+
+      return craftItem(client, agent, plan.itemCode, plan.craftQuantity).map(() => true);
+    })
     .orElse((error) => {
-      logger.error(error, `${characterName}: failed to craft from bank surplus, continuing`);
-      return okAsync(undefined);
+      logger.error(
+        error,
+        `${characterName}: failed to progress ${goal.skill}, falling back to hunting`,
+      );
+      return okAsync(false);
     });
 
 /**
@@ -180,9 +160,9 @@ const craftFromBankSurplus = (
  * level, not a missing material), records the exact `{skill,
  * requiredLevel}` it's waiting on in `pendingCraftUnlocks` - so
  * `runAutoHuntTask` knows precisely when it's worth checking gear again
- * (see `PendingCraftUnlocks`) - and crafts from bank surplus in the
- * meantime (`craftFromBankSurplus`) so the character makes some progress
- * toward that profession level instead of idling on the block.
+ * (see `PendingCraftUnlocks`). Subsequent cycles use that goal to choose and
+ * execute a recipe for the exact blocked profession until the threshold is
+ * reached.
  *
  * Known v1 simplification: doesn't weigh *how much* is missing before
  * committing (no quantity cap) - a static numeric threshold would be
@@ -235,10 +215,10 @@ const equipWorthwhileUpgrade = (
             requiredLevel: error.requiredLevel,
             skill: error.skill,
           },
-          `${characterName}: ${item.code} needs ${error.skill} level ${error.requiredLevel} - crafting from bank surplus for profession xp in the meantime`,
+          `${characterName}: ${item.code} needs ${error.skill} level ${error.requiredLevel} - queued targeted profession progress`,
         );
 
-        return craftFromBankSurplus(client, characterName, agent);
+        return okAsync(undefined);
       }
 
       logger.error(
@@ -504,11 +484,12 @@ export const runHuntTask = async (
  * upgrade could sit unequipped indefinitely (this happened live). That
  * level-up/first-cycle check (`equipAllCombatGearIfWorthwhile`) also
  * commits to a worthwhile upgrade even when it isn't completely free, as
- * long as every missing material has a known source, and crafts from
- * bank surplus for profession XP when blocked by a crafting-skill level
- * instead - the every-cycle weapon check (`equipBestCombatGearIfAvailable`)
- * stays strictly free-only, since paying a gathering/hunting detour that
- * often would be too disruptive.
+ * long as every missing material has a known source. When blocked by a
+ * crafting-skill level, subsequent cycles prioritize a bounded craft for
+ * that exact profession until its required threshold is reached; the
+ * every-cycle weapon check (`equipBestCombatGearIfAvailable`) stays strictly
+ * free-only, since paying a gathering/hunting detour that often would be too
+ * disruptive.
  */
 export const runAutoHuntTask = (
   client: ArtifactsClient,
@@ -529,47 +510,59 @@ export const runAutoHuntTask = (
   let lastGearCheckLevel: number | undefined;
   const pendingCraftUnlocks: PendingCraftUnlocks = new Map();
 
+  const continueHunting = () =>
+    findNextSafeMonster(client, agent.getCharacter()).andThen((monster) => {
+      if (monster === undefined) {
+        return errAsync(new NoSafeMonsterFoundError(agent.getCharacter().level));
+      }
+
+      const currentLevel = agent.getCharacter().level;
+      const unlockReached = [...pendingCraftUnlocks].some(
+        ([skill, requiredLevel]) => craftSkillLevel(agent.getCharacter(), skill) >= requiredLevel,
+      );
+      const needsGearCheck =
+        lastGearCheckLevel === undefined || currentLevel > lastGearCheckLevel || unlockReached;
+
+      if (needsGearCheck) {
+        lastGearCheckLevel = currentLevel;
+
+        for (const [skill, requiredLevel] of pendingCraftUnlocks) {
+          if (craftSkillLevel(agent.getCharacter(), skill) >= requiredLevel) {
+            pendingCraftUnlocks.delete(skill);
+          }
+        }
+      }
+
+      const equipGear = needsGearCheck
+        ? equipAllCombatGearIfWorthwhile(client, characterName, agent, monster, pendingCraftUnlocks)
+        : equipBestCombatGearIfAvailable(client, characterName, agent, monster, "weapon");
+
+      return equipGear.andThen(() => runHuntingCycle(client, agent, monster.code));
+    });
+
+  const nextProfessionGoal = (): ProfessionGoal | undefined =>
+    [...pendingCraftUnlocks]
+      .map(([skill, targetLevel]) => ({ skill, targetLevel }))
+      .filter((goal) => craftSkillLevel(agent.getCharacter(), goal.skill) < goal.targetLevel)
+      .sort((left, right) => {
+        const leftGap = left.targetLevel - craftSkillLevel(agent.getCharacter(), left.skill);
+        const rightGap = right.targetLevel - craftSkillLevel(agent.getCharacter(), right.skill);
+        return leftGap - rightGap || left.skill.localeCompare(right.skill);
+      })[0];
+
   return runForever(
     characterName,
     "auto-hunt cycle",
     () =>
-      restIfLow(agent).andThen(() =>
-        findNextSafeMonster(client, agent.getCharacter()).andThen((monster) => {
-          if (monster === undefined) {
-            return errAsync(new NoSafeMonsterFoundError(agent.getCharacter().level));
-          }
+      restIfLow(agent).andThen(() => {
+        const goal = nextProfessionGoal();
 
-          const currentLevel = agent.getCharacter().level;
-          const unlockReached = [...pendingCraftUnlocks].some(
-            ([skill, requiredLevel]) =>
-              craftSkillLevel(agent.getCharacter(), skill) >= requiredLevel,
-          );
-          const needsGearCheck =
-            lastGearCheckLevel === undefined || currentLevel > lastGearCheckLevel || unlockReached;
-
-          if (needsGearCheck) {
-            lastGearCheckLevel = currentLevel;
-
-            for (const [skill, requiredLevel] of pendingCraftUnlocks) {
-              if (craftSkillLevel(agent.getCharacter(), skill) >= requiredLevel) {
-                pendingCraftUnlocks.delete(skill);
-              }
-            }
-          }
-
-          const equipGear = needsGearCheck
-            ? equipAllCombatGearIfWorthwhile(
-                client,
-                characterName,
-                agent,
-                monster,
-                pendingCraftUnlocks,
-              )
-            : equipBestCombatGearIfAvailable(client, characterName, agent, monster, "weapon");
-
-          return equipGear.andThen(() => runHuntingCycle(client, agent, monster.code));
-        }),
-      ),
+        return goal === undefined
+          ? continueHunting()
+          : progressProfessionGoal(client, characterName, agent, goal).andThen((didProgress) =>
+              didProgress ? okAsync(undefined) : continueHunting(),
+            );
+      }),
     signal,
   );
 };

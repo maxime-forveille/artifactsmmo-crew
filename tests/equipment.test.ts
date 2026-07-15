@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   craftAndEquip,
+  craftItem,
   InsufficientCraftingLevelError,
   UnsafeMonsterError,
   UnsupportedEquipSlotError,
@@ -92,7 +93,10 @@ const buildItem = (overrides: Partial<Item>): Item => ({
 });
 
 /** A tiny in-memory character whose inventory is mutated by gather/craft, like the real agent would be. */
-const createFakeCharacterState = (inventoryMaxItems = Number.MAX_SAFE_INTEGER) => {
+const createFakeCharacterState = (
+  inventoryMaxItems = Number.MAX_SAFE_INTEGER,
+  overrides: Partial<CharacterSnapshot> = {},
+) => {
   const held = new Map<string, number>();
 
   const getCharacter = (): CharacterSnapshot =>
@@ -116,6 +120,7 @@ const createFakeCharacterState = (inventoryMaxItems = Number.MAX_SAFE_INTEGER) =
       res_earth: 0,
       res_fire: 0,
       res_water: 0,
+      ...overrides,
     }) as CharacterSnapshot;
 
   const add = (code: string, quantity: number) => held.set(code, (held.get(code) ?? 0) + quantity);
@@ -124,6 +129,65 @@ const createFakeCharacterState = (inventoryMaxItems = Number.MAX_SAFE_INTEGER) =
 
   return { add, getCharacter, remove };
 };
+
+describe("craftItem", () => {
+  it("performs the target craft instead of withdrawing an already-banked output", async () => {
+    const state = createFakeCharacterState(Number.MAX_SAFE_INTEGER, {
+      weaponcrafting_level: 1,
+    });
+    state.add("copper_bar", 1);
+    const practiceDagger = buildItem({
+      code: "practice_dagger",
+      craft: {
+        items: [{ code: "copper_bar", quantity: 1 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const getBankItems = vi.fn(() =>
+      okAsync(buildBankItemsPage([{ code: "practice_dagger", quantity: 10 }])),
+    );
+    const getItem = vi.fn(() => okAsync({ data: practiceDagger } satisfies ItemResponse));
+    const getMaps = vi.fn(() => okAsync(buildMapPage([buildMap(7)])));
+    const moveTo = vi.fn(() => okAsync(undefined));
+    const craft = vi.fn(() =>
+      okAsync({
+        character: state.getCharacter(),
+        cooldown: buildCooldown(),
+        details: { items: [], xp: 5 },
+      }),
+    );
+
+    const result = await craftItem(
+      {
+        getBankItems,
+        getItem,
+        getMaps,
+        getMonsters: vi.fn(),
+        getResources: vi.fn(),
+      },
+      {
+        craft,
+        depositItems: vi.fn(),
+        equip: vi.fn(),
+        fight: vi.fn(),
+        gather: vi.fn(),
+        getCharacter: state.getCharacter,
+        moveTo,
+        rest: vi.fn(),
+        unequip: vi.fn(),
+        withdrawItems: vi.fn(),
+      },
+      "practice_dagger",
+      1,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(getBankItems).not.toHaveBeenCalled();
+    expect(craft).toHaveBeenCalledWith("practice_dagger", 1);
+  });
+});
 
 describe("craftAndEquip", () => {
   it("gathers the raw material, crafts the intermediate, crafts the final item, then equips it", async () => {
