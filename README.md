@@ -53,39 +53,21 @@ pnpm dev
 ```
 .
 ├── src/
-│   ├── bot/                # Main bot logic
-│   │   ├── characters/     # characterAgent.ts: cooldown/position-aware agent
-│   │   │                   # factory, shared by all 5 characters (not one
-│   │   │                   # file per character)
-│   │   ├── strategies/     # farming.ts, hunting.ts, equipment.ts, banking.ts:
-│   │   │                   # gathering, combat, craft+equip, and bank-deposit
-│   │   │                   # pipelines
-│   │   ├── tasks/          # task.ts: the Task type (farm / hunt / autoHunt /
-│   │   │                   # autoFarm / craftAndEquip / craftAndEquipThenHunt);
-│   │   │                   # runTask.ts: dispatcher; taskRunners.ts: one
-│   │   │                   # runner per task type; runForever.ts: shared
-│   │   │                   # retry-forever loop
-│   │   ├── combat.ts        # fightSafely: rests when HP is low, fights once,
-│   │   │                    # logs a loss; averageDamagePerTurn/isSafeToFight:
-│   │   │                    # the damage model shared with gear.ts
-│   │   ├── crewPolicy.ts    # Pure snapshot -> proposed task assignments
-│   │   ├── crewSnapshot.ts  # Read-only shared view of all characters + bank
-│   │   ├── gear.ts          # Task-appropriate equipment: findBestGatheringTool
-│   │   │                    # (best tool for a gathering skill) and
-│   │   │                    # findBestCombatWeapon (best weapon vs a monster)
-│   │   ├── inventory.ts     # Pure helpers over a character's inventory
-│   │   │                    # (held quantity, full-capacity checks, ...)
-│   │   ├── progression.ts   # Automated decision layer (in progress): what
-│   │   │                    # to hunt/farm/craft next, e.g. findNextSafeMonster
-│   │   ├── xpRates.ts       # observedMonsterXpRates: XP/second per monster,
-│   │   │                    # derived from GET /my/logs/{name} - no guessed
-│   │   │                    # game formula, only data the API has revealed
-│   │   ├── taskSupervisor.ts # runTaskSupervisor/reconcileTasks: re-reads
-│   │   │                     # tasks.json on an interval and starts/stops/
-│   │   │                     # restarts characters per AbortController
-│   │   │                     # (see task.ts's tasksEqual for the diffing)
-│   │   └── world.ts         # Resolves resource/monster/workshop codes to
-│   │                        # map positions
+│   ├── bot/                     # Main bot logic
+│   │   ├── activities/          # Bounded workflows and the Activity type:
+│   │   │                        # farming, hunting, equipment, and banking
+│   │   ├── orchestration/       # Shared crew snapshot and decision policy
+│   │   ├── runtime/             # Character agent and task supervision
+│   │   ├── tasks/               # Transitional forever-task implementation;
+│   │   │                        # replaced incrementally by orchestration
+│   │   ├── combat.ts            # Combat execution and safety model (mixed;
+│   │   │                        # split after Activity migration)
+│   │   ├── gear.ts              # Task-appropriate equipment selection
+│   │   ├── inventory.ts         # Pure inventory helpers
+│   │   ├── materialPlan.ts      # Read-only material/profession planning
+│   │   ├── progression.ts       # Monster and resource target selection
+│   │   ├── world.ts             # Resolves game codes to map positions
+│   │   └── xpRates.ts           # Observed combat XP/second
 │   ├── client/              # Typed, Result-based Artifacts MMO API wrapper,
 │   │                         # incl. a paced rate limiter (see below)
 │   │                         # (schema.d.ts is generated from the OpenAPI spec,
@@ -123,8 +105,8 @@ for the full list of task types and their fields); it's parsed and validated
 by `loadTaskAssignments` (`src/utils/taskAssignments.ts`) with the same
 valibot + "throw a readable summary of every issue" pattern as env vars, and
 re-read every 10 seconds while the bot runs - editing it takes effect without
-a restart (see `src/bot/taskSupervisor.ts`, and the Roadmap section below for
-exactly when a change applies). Not committed (see `tasks.example.json` for
+restart (see `src/bot/runtime/taskSupervisor.ts`, and the Roadmap section
+below for exactly when a change applies). Not committed (see `tasks.example.json` for
 the template) since it's runtime config for this account's characters, not
 project source - same treatment as `.env`.
 
@@ -171,19 +153,19 @@ project source - same treatment as `.env`.
   immediate invalidation after a successful deposit or withdrawal.
   `getCharacter` remains uncached. Only successful results are cached; a
   failed attempt is evicted immediately so the next call retries for real.
-- **`CharacterAgent`** (`src/bot/characters/characterAgent.ts`) — wraps the
+- **`CharacterAgent`** (`src/bot/runtime/characterAgent.ts`) — wraps the
   client for one character: waits out cooldowns automatically, tracks
   position/inventory/HP from every action's response (including `fight`,
   which needed special handling — see git history for why).
 - **World resolution** (`src/bot/world.ts`) — maps a resource/monster/workshop
   code to a map position, and finds which resource node or monster drops a
   given item code (item codes and resource/monster codes are distinct).
-- **Farming** (`src/bot/strategies/farming.ts`) — move to a resource, gather
+- **Farming** (`src/bot/activities/farming.ts`) — move to a resource, gather
   until the inventory is full, bank everything.
-- **Hunting** (`src/bot/strategies/hunting.ts` + `src/bot/combat.ts`) — move
+- **Hunting** (`src/bot/activities/hunting.ts` + `src/bot/combat.ts`) — move
   to a monster, fight repeatedly (resting below 50% HP, logging losses
   without stopping), bank everything looted.
-- **Craft & equip** (`src/bot/strategies/equipment.ts`) — recursively resolves
+- **Craft & equip** (`src/bot/activities/equipment.ts`) — recursively resolves
   and gathers/crafts whatever materials are missing, checking in order: held
   inventory, the bank, whatever's currently equipped (e.g. the starter
   `wooden_stick` gets unequipped to use as a material for `wooden_staff`),
@@ -203,12 +185,14 @@ project source - same treatment as `.env`.
   `craftAndEquipThenHunt` does both (gear up, then hunt forever - the
   craft/equip part is a no-op for characters that already have the item).
   `src/index.ts` assigns one task per character.
-- **Crew snapshot** (`src/bot/crewSnapshot.ts`) — reads all account characters
-  and every bank page into one deterministic, read-only value. It is the
+- **Crew snapshot** (`src/bot/orchestration/crewSnapshot.ts`) — reads all
+  account characters and every bank page into one deterministic, read-only
+  value. It is the
   observational foundation for cross-character decisions and deliberately
   performs no assignment or game action yet.
-- **Crew policy producer** (`src/bot/crewPolicy.ts`) — applies a pure policy to
-  every character with access to the complete shared snapshot and returns
+- **Crew policy producer** (`src/bot/orchestration/crewPolicy.ts`) — applies a
+  pure policy to every character with access to the complete shared snapshot
+  and returns
   proposed `TaskAssignment[]`. Its first concrete rule detects an explicit
   bank shortage and sends the strongest eligible gatherer to the exact
   resource while everyone else keeps progressing through `autoHunt`;
@@ -342,8 +326,9 @@ Recently delivered (see git log for details):
   fail-fast-with-a-readable-summary pattern as env vars) - reassigning a
   character no longer needs a code change, just an edit to that file
 - ✅ `tasks.json` reloads without restarting the process
-  (`src/bot/taskSupervisor.ts`): re-read every 10s, diffed per character
-  (`tasksEqual`), and only characters whose task actually changed get
+  (`src/bot/runtime/taskSupervisor.ts`): re-read every 10s, diffed per
+  character (`tasksEqual`), and only characters whose task actually changed
+  get
   restarted - everyone else keeps running untouched. A restart means an
   `AbortController` per character is aborted and its (forever-looping)
   task is awaited before the new one starts, so a reassignment applies
@@ -385,7 +370,7 @@ Recently delivered (see git log for details):
   indefinitely (found live: a free `copper_legs_armor` sitting unequipped
   on two level-8 characters).
 - 🐛 Fixed live: hunting a monster to obtain a raw craft material
-  (`ensureHeldItem`'s fallback in `strategies/equipment.ts`) now checks
+  (`ensureHeldItem`'s fallback in `activities/equipment.ts`) now checks
   `isSafeToFight` first and refuses (a new `UnsafeMonsterError`) instead
   of fighting an unsafe monster anyway - unlike the main `autoHunt` loop
   (`findNextSafeMonster`), this fallback had no safety check at all
@@ -396,7 +381,7 @@ Recently delivered (see git log for details):
   listed in a `craftAndEquip` task), which exposed the gap - two
   characters were repeatedly losing fights against monsters well above
   what their gear could handle, chasing amulet/armor materials.
-- ✅ `ensureHeldItem` (`strategies/equipment.ts`) now checks the
+- ✅ `ensureHeldItem` (`activities/equipment.ts`) now checks the
   character's crafting-skill level against a recipe's `craft.level`
   requirement (`craftSkillLevel`, `src/bot/progression.ts`) before
   gathering a single material for it, failing fast with a new
@@ -422,14 +407,15 @@ Recently delivered (see git log for details):
   profession (`planProfessionProgress`), gathers or safely hunts one craft's
   missing materials, and repeats one bounded craft per cycle until the
   threshold is reached. It then re-checks gear and resumes hunting.
-- ✅ Shared crew snapshot (`readCrewSnapshot`, `src/bot/crewSnapshot.ts`): one
-  account-character read plus every bank page produces a deterministic,
-  read-only view for future cross-character policies. This first slice only
+- ✅ Shared crew snapshot (`readCrewSnapshot`,
+  `src/bot/orchestration/crewSnapshot.ts`): one account-character read plus
+  every bank page produces a deterministic, read-only view for future cross-character policies. This first slice only
   senses account state; it does not assign tasks or perform actions.
 - ✅ Pure crew assignment producer (`proposeCrewAssignments`,
-  `src/bot/crewPolicy.ts`): applies a policy once per character while exposing
-  the full shared snapshot to every decision. Its explicit baseline proposes
-  `autoHunt` for everyone; nothing consumes or executes the proposal yet.
+  `src/bot/orchestration/crewPolicy.ts`): applies a policy once per character
+  while exposing the full shared snapshot to every decision. Its explicit
+  baseline proposes `autoHunt` for everyone; nothing consumes or executes the
+  proposal yet.
 - ✅ First cross-character rule (`proposeResourceReplenishment`): when an
   explicit bank target is below its minimum, select the eligible character
   with the highest matching gathering-skill level and propose `farm` for the
@@ -437,6 +423,11 @@ Recently delivered (see git log for details):
   is met, the gatherer does too. This intentionally uses fixed `farm`, not
   `autoFarm`, because the latter may pick a higher-level node that does not
   produce the missing item.
+- ✅ Bot modules now reflect their responsibilities: bounded workflows live
+  under `activities/`, shared decisions under `orchestration/`, and mutable
+  execution concerns under `runtime/`. The initial `Activity` union records
+  `farmResource`, `huntMonster`, `craftItem`, and `equipItem` without yet
+  changing the transitional task runtime.
 
 Up next (not yet started, roughly in order of likely value - see point 7
 under "Automated progression decisions" for the full staged plan):
@@ -615,7 +606,7 @@ combine` - safe here since it's read-only, unlike the action
      instead of refactoring the working pipeline" call made for Gap B.
    - ✅ **Gap B (the real missing piece): a dry-run material-cost query.**
      `materialsNeededFor` (`src/bot/materialPlan.ts`) mirrors
-     `ensureHeldItem`'s exact recursion (`strategies/equipment.ts`:
+     `ensureHeldItem`'s exact recursion (`activities/equipment.ts`:
      inventory -> bank -> craft materials recursively -> else classify
      the raw material as gatherable/huntable/unknown), but as a pure,
      side-effect-free query: it takes a character snapshot and returns
