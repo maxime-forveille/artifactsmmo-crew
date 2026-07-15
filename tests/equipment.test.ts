@@ -7,7 +7,7 @@ import {
   InsufficientCraftingLevelError,
   UnsafeMonsterError,
   UnsupportedEquipSlotError,
-} from "../src/bot/strategies/equipment.js";
+} from "../src/bot/activities/equipment.js";
 import { MonsterNotFoundError } from "../src/bot/world.js";
 import { ArtifactsApiError } from "../src/client/index.js";
 import type { components } from "../src/client/schema.js";

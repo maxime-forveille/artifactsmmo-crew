@@ -2,7 +2,7 @@ import { okAsync, type ResultAsync } from "neverthrow";
 
 import type { ArtifactsApiError } from "../client/index.js";
 import { logger } from "../utils/logger.js";
-import type { CharacterAgent } from "./characters/characterAgent.js";
+import type { CharacterAgent } from "./runtime/characterAgent.js";
 
 type CombatAgent = Pick<CharacterAgent, "fight" | "getCharacter" | "rest">;
 type FightOutcome =

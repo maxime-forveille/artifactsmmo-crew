@@ -3,7 +3,7 @@ import { okAsync, type ResultAsync } from "neverthrow";
 import type { ArtifactsApiError, ArtifactsClient } from "../../client/index.js";
 import { fightSafely } from "../combat.js";
 import { logger } from "../../utils/logger.js";
-import type { CharacterAgent } from "../characters/characterAgent.js";
+import type { CharacterAgent } from "../runtime/characterAgent.js";
 import { isInventoryFull, totalItemCount } from "../inventory.js";
 import { type LocationNotFoundError, resolveLocation } from "../world.js";
 import { type BankingError, goToBankAndDepositEverything } from "./banking.js";

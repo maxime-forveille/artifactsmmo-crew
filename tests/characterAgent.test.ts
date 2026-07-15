@@ -1,7 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createCharacterAgent } from "../src/bot/characters/characterAgent.js";
+import { createCharacterAgent } from "../src/bot/runtime/characterAgent.js";
 import { ArtifactsApiError } from "../src/client/index.js";
 import type { ArtifactsClient } from "../src/client/index.js";
 import type { components } from "../src/client/schema.js";

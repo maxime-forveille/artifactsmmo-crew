@@ -3,7 +3,7 @@ import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import type { ArtifactsClient } from "../../client/index.js";
 import type { components } from "../../client/schema.js";
 import { logger } from "../../utils/logger.js";
-import type { CharacterAgent } from "../characters/characterAgent.js";
+import type { CharacterAgent } from "../runtime/characterAgent.js";
 import { restIfLow } from "../combat.js";
 import {
   findBestCombatGear,
@@ -26,9 +26,9 @@ import {
   craftAndEquip,
   craftItem,
   InsufficientCraftingLevelError,
-} from "../strategies/equipment.js";
-import { runFarmingCycle } from "../strategies/farming.js";
-import { runHuntingCycle } from "../strategies/hunting.js";
+} from "../activities/equipment.js";
+import { runFarmingCycle } from "../activities/farming.js";
+import { runHuntingCycle } from "../activities/hunting.js";
 import { runForever } from "./runForever.js";
 
 type CraftSkill = components["schemas"]["CraftSkill"];

@@ -1,7 +1,7 @@
 import { okAsync, ResultAsync } from "neverthrow";
 
-import type { ArtifactsApiError, ArtifactsClient } from "../client/index.js";
-import type { components } from "../client/schema.js";
+import type { ArtifactsApiError, ArtifactsClient } from "../../client/index.js";
+import type { components } from "../../client/schema.js";
 
 type BankItem = Readonly<components["schemas"]["SimpleItemSchema"]>;
 type Character = Readonly<components["schemas"]["CharacterSchema"]>;

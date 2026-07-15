@@ -1,7 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { readCrewSnapshot } from "../src/bot/crewSnapshot.js";
+import { readCrewSnapshot } from "../src/bot/orchestration/crewSnapshot.js";
 import { ArtifactsApiError, type ArtifactsClient } from "../src/client/index.js";
 import type { components } from "../src/client/schema.js";
 

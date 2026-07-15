@@ -35,7 +35,7 @@ export type MaterialSource =
  * both inventory and bank), and where it could come from. Only leaf
  * (non-craftable) materials show up here - an intermediate item that's
  * itself missing but craftable is represented by its own ingredients
- * instead, same as `ensureHeldItem`'s recursion in `strategies/equipment.ts`.
+ instead, same as `ensureHeldItem`'s recursion in `activities/equipment.ts`.
  */
 export type MissingMaterial = {
   readonly itemCode: string;
@@ -78,7 +78,7 @@ const sourceFor = (
 
 /**
  * Same as `materialsNeededFor`, but for when the item's data has already
- * been fetched (mirrors `ensureHeldItem`'s split in `strategies/equipment.ts`
+ been fetched (mirrors `ensureHeldItem`'s split in `activities/equipment.ts`
  * for the same reason: avoid a redundant `getItem` round-trip when a caller
  * already has it, e.g. while recursing into craft materials).
  */
@@ -125,7 +125,7 @@ const materialsNeededForItem = (
 
 /**
  * Read-only, side-effect-free version of `ensureHeldItem`
- * (`strategies/equipment.ts`): reports what's still missing to reach
+ (`activities/equipment.ts`): reports what's still missing to reach
  * `quantity` of `itemCode`, recursing into craft materials exactly the same
  * way, but never moves the character, withdraws from the bank, gathers,
  * hunts, or crafts anything. Meant for a future decision layer to compare

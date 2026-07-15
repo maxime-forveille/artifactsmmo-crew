@@ -23,7 +23,7 @@ const { runTaskMock } = vi.hoisted(() => ({
 
 vi.mock("../src/bot/tasks/runTask.js", () => ({ runTask: runTaskMock }));
 
-import { reconcileTasks, runTaskSupervisor } from "../src/bot/taskSupervisor.js";
+import { reconcileTasks, runTaskSupervisor } from "../src/bot/runtime/taskSupervisor.js";
 
 const fakeClient = {} as ArtifactsClient;
 

@@ -1,10 +1,10 @@
 import { err, ok, type Result } from "neverthrow";
 
-import type { components } from "../client/schema.js";
-import type { TaskAssignment } from "../utils/taskAssignments.js";
+import type { components } from "../../client/schema.js";
+import type { TaskAssignment } from "../../utils/taskAssignments.js";
 import type { CrewSnapshot } from "./crewSnapshot.js";
-import { skillLevel } from "./progression.js";
-import type { Task } from "./tasks/task.js";
+import { skillLevel } from "../progression.js";
+import type { Task } from "../tasks/task.js";
 
 type Character = CrewSnapshot["characters"][number];
 

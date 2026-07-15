@@ -7,8 +7,8 @@ import {
   proposeCrewAssignments,
   proposeResourceReplenishment,
   type CrewPolicy,
-} from "../src/bot/crewPolicy.js";
-import type { CrewSnapshot } from "../src/bot/crewSnapshot.js";
+} from "../src/bot/orchestration/crewPolicy.js";
+import type { CrewSnapshot } from "../src/bot/orchestration/crewSnapshot.js";
 import type { components } from "../src/client/schema.js";
 
 type Character = components["schemas"]["CharacterSchema"];

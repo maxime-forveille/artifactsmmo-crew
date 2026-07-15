@@ -3,7 +3,7 @@ import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import type { ArtifactsApiError, ArtifactsClient } from "../../client/index.js";
 import type { components } from "../../client/schema.js";
 import { logger } from "../../utils/logger.js";
-import type { CharacterAgent } from "../characters/characterAgent.js";
+import type { CharacterAgent } from "../runtime/characterAgent.js";
 import { fightSafely, isSafeToFight } from "../combat.js";
 import { EQUIP_SLOT_BY_ITEM_TYPE, equippedItemInSlot, SLOT_FIELD } from "../gear.js";
 import { heldItems, heldQuantity, isInventoryFull, totalItemCount } from "../inventory.js";

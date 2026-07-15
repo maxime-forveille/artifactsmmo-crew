@@ -1,4 +1,4 @@
-import { runTaskSupervisor } from "./bot/taskSupervisor.js";
+import { runTaskSupervisor } from "./bot/runtime/taskSupervisor.js";
 import { bot } from "./client/index.js";
 import { logger } from "./utils/logger.js";
 import { loadTaskAssignments } from "./utils/taskAssignments.js";

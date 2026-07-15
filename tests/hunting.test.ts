@@ -1,7 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { runHuntingCycle } from "../src/bot/strategies/hunting.js";
+import { runHuntingCycle } from "../src/bot/activities/hunting.js";
 import { LocationNotFoundError } from "../src/bot/world.js";
 import { ArtifactsApiError } from "../src/client/index.js";
 import type { components } from "../src/client/schema.js";
