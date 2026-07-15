@@ -170,8 +170,12 @@ outside orchestration state.
 `orchestration/resourceReplenishment.ts` provides the first Activity-aware pure
 transition. It completes a satisfied unreserved bank Goal, avoids work already
 reserved, excludes busy characters, and otherwise proposes one `farmResource`
-Activity for the strongest eligible gatherer. The exact resource remains an
-explicit planning input until source-selection policy is designed.
+Activity for the strongest eligible gatherer. The configured planner applies
+that transition to every Goal in priority order. Its proposals act as temporary
+Reservations during the same decision, allowing independent targets to use
+different idle characters without duplicating in-flight work. The exact
+resources remain explicit planning inputs until source-selection policy is
+designed.
 
 `orchestration/activityLifecycle.ts` owns the pure Reservation transitions. A
 successfully started Activity is promoted from a proposal to a Reservation only

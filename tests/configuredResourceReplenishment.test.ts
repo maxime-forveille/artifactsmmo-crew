@@ -96,6 +96,68 @@ describe("createConfiguredResourceReplenishmentPlanner", () => {
     });
   });
 
+  it("uses different idle characters for simultaneous Goals", () => {
+    const snapshot = {
+      ...buildSnapshot(),
+      characters: [buildCharacter("Stan"), buildCharacter("Cartman")],
+    };
+
+    const result = buildPlanner()(snapshot, buildState());
+
+    expect(result.isOk() && result.value).toEqual({
+      activities: [
+        {
+          activity: { resourceCode: "copper_rocks", type: "farmResource" },
+          characterName: "Cartman",
+          consumes: [],
+          goalId: "goal-copper",
+          produces: [{ itemCode: "copper_ore" }],
+        },
+        {
+          activity: { resourceCode: "ash_tree", type: "farmResource" },
+          characterName: "Stan",
+          consumes: [],
+          goalId: "goal-ash",
+          produces: [{ itemCode: "ash_wood" }],
+        },
+      ],
+      state: buildState(),
+    });
+  });
+
+  it("continues to lower-priority Goals while a higher-priority Goal is reserved", () => {
+    const copperReservation = {
+      activity: { resourceCode: "copper_rocks", type: "farmResource" as const },
+      characterName: "Stan",
+      consumes: [],
+      goalId: "goal-copper",
+      produces: [{ itemCode: "copper_ore" }],
+    };
+    const state = {
+      goals: [copperGoal, ashGoal],
+      reservations: [copperReservation],
+    };
+    const snapshot = {
+      ...buildSnapshot(),
+      characters: [buildCharacter("Stan"), buildCharacter("Cartman")],
+    };
+
+    const result = buildPlanner()(snapshot, state);
+
+    expect(result.isOk() && result.value).toEqual({
+      activities: [
+        {
+          activity: { resourceCode: "ash_tree", type: "farmResource" },
+          characterName: "Cartman",
+          consumes: [],
+          goalId: "goal-ash",
+          produces: [{ itemCode: "ash_wood" }],
+        },
+      ],
+      state,
+    });
+  });
+
   it("removes every satisfied Goal without proposing work", () => {
     const result = buildPlanner()(
       buildSnapshot([

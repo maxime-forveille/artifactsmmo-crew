@@ -108,8 +108,8 @@ new orchestration Interface.
 
 ## Decision quality
 
-- [ ] Support several simultaneous bank targets with explicit priority.
-- [ ] Account for in-flight production before assigning duplicate work.
+- [x] Support several simultaneous bank targets with explicit priority.
+- [x] Account for in-flight production before assigning duplicate work.
 - [ ] Compare hunting and gathering with observed XP/time data.
 - [ ] Choose profession XP recipes from observed efficiency rather than only
       missing-material count and recipe level.

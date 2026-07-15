@@ -31,8 +31,9 @@ export type ConfiguredResourceReplenishmentPlanner = (
 ) => Result<ResourceReplenishmentPlan, ConfiguredResourceReplenishmentError>;
 
 /**
- * Plans the highest-priority unresolved bank Goal. Goals already satisfied by
- * the same snapshot are removed until useful work is found or no Goals remain.
+ * Plans configured bank Goals in priority order. Proposed assignments act as
+ * temporary Reservations while the same decision examines lower-priority Goals,
+ * preventing one idle character from receiving several Activities at once.
  */
 export const createConfiguredResourceReplenishmentPlanner = (
   resolvedResources: readonly ResolvedGoalResource[],
@@ -42,34 +43,41 @@ export const createConfiguredResourceReplenishmentPlanner = (
   );
 
   return (snapshot, state) => {
-    let nextState = state;
+    const activities: ResourceReplenishmentPlan["activities"][number][] = [];
+    const completedGoalIds = new Set<string>();
+    const planningReservations = [...state.reservations];
 
-    for (;;) {
-      const goal = nextState.goals[0];
-
-      if (goal === undefined) {
-        return ok({ activities: [], state: nextState });
-      }
-
+    for (const goal of state.goals) {
       const resource = resourcesByGoalId.get(goal.id);
 
       if (resource === undefined) {
         return err(new GoalResourceNotResolvedError(goal.id));
       }
 
-      const planned = planResourceReplenishment(snapshot, nextState, resource);
+      const planned = planResourceReplenishment(
+        snapshot,
+        { goals: [goal], reservations: planningReservations },
+        resource,
+      );
 
       if (planned.isErr()) {
         return err(planned.error);
       }
 
-      const didCompleteGoal = planned.value.state.goals.length < nextState.goals.length;
-
-      if (!didCompleteGoal) {
-        return ok(planned.value);
+      if (planned.value.state.goals.length === 0) {
+        completedGoalIds.add(goal.id);
       }
 
-      nextState = planned.value.state;
+      activities.push(...planned.value.activities);
+      planningReservations.push(...planned.value.activities);
     }
+
+    return ok({
+      activities,
+      state: {
+        goals: state.goals.filter((goal) => !completedGoalIds.has(goal.id)),
+        reservations: state.reservations,
+      },
+    });
   };
 };
