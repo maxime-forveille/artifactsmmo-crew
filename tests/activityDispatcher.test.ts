@@ -20,7 +20,9 @@ const buildCharacter = (): Character => ({
   inventory: [{ code: "loot", quantity: 20, slot: 1 }],
   inventory_max_items: 20,
   max_hp: 100,
+  level: 5,
   name: "Stan",
+  weapon_slot: "copper_dagger",
   weaponcrafting_level: 5,
 });
 
@@ -52,7 +54,10 @@ const buildDependencies = () => {
     ...({} as Item),
     code: "copper_dagger",
     craft: { items: [], level: 5, quantity: 1, skill: "weaponcrafting" as const },
+    level: 5,
+    type: "weapon",
   };
+  const getItem = vi.fn(() => okAsync({ data: item }));
 
   return {
     agent: {
@@ -62,13 +67,16 @@ const buildDependencies = () => {
       depositItems: vi.fn(() =>
         okAsync({ bank: [], character, cooldown: buildCooldown(), items: [] }),
       ),
+      equip: vi.fn(),
       fight: vi.fn(),
       gather: vi.fn(),
       getCharacter: vi.fn(() => character),
       moveTo: vi.fn(() => okAsync(undefined)),
       rest: vi.fn(),
+      unequip: vi.fn(),
     },
-    client: { getItem: vi.fn(() => okAsync({ data: item })), getMaps },
+    client: { getItem, getMaps },
+    getItem,
     getMaps,
   };
 };
@@ -89,6 +97,22 @@ describe("runActivity", () => {
       content_type: "workshop",
     });
     expect(agent.craft).toHaveBeenCalledWith("copper_dagger", 2);
+    expect(agent.gather).not.toHaveBeenCalled();
+    expect(agent.fight).not.toHaveBeenCalled();
+  });
+
+  it("dispatches equipItem to one targeted equip", async () => {
+    const { agent, client, getItem } = buildDependencies();
+
+    const result = await runActivity(client, agent, {
+      itemCode: "copper_dagger",
+      type: "equipItem",
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(getItem).toHaveBeenCalledWith("copper_dagger");
+    expect(agent.equip).not.toHaveBeenCalled();
+    expect(agent.unequip).not.toHaveBeenCalled();
     expect(agent.gather).not.toHaveBeenCalled();
     expect(agent.fight).not.toHaveBeenCalled();
   });

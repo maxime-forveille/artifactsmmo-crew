@@ -3,23 +3,41 @@ import type { ResultAsync } from "neverthrow";
 import type { ArtifactsClient } from "../../client/index.js";
 import type {
   CraftItemActivity,
+  EquipItemActivity,
   FarmResourceActivity,
   HuntMonsterActivity,
 } from "../activities/activity.js";
 import { runCraftItemActivity, type CraftItemExecutionError } from "../activities/crafting.js";
+import { runEquipItemActivity, type EquipItemExecutionError } from "../activities/equipping.js";
 import type { FarmingError } from "../activities/farming.js";
 import { runFarmingCycle } from "../activities/farming.js";
 import type { HuntingError } from "../activities/hunting.js";
 import { runHuntingCycle } from "../activities/hunting.js";
 import type { CharacterAgent } from "./characterAgent.js";
 
-export type ExecutableActivity = CraftItemActivity | FarmResourceActivity | HuntMonsterActivity;
-export type ActivityExecutionError = CraftItemExecutionError | FarmingError | HuntingError;
+export type ExecutableActivity =
+  | CraftItemActivity
+  | EquipItemActivity
+  | FarmResourceActivity
+  | HuntMonsterActivity;
+export type ActivityExecutionError =
+  | CraftItemExecutionError
+  | EquipItemExecutionError
+  | FarmingError
+  | HuntingError;
 
 type ActivityClient = Pick<ArtifactsClient, "getItem" | "getMaps">;
 type ActivityAgent = Pick<
   CharacterAgent,
-  "craft" | "depositItems" | "fight" | "gather" | "getCharacter" | "moveTo" | "rest"
+  | "craft"
+  | "depositItems"
+  | "equip"
+  | "fight"
+  | "gather"
+  | "getCharacter"
+  | "moveTo"
+  | "rest"
+  | "unequip"
 >;
 
 /**
@@ -35,6 +53,9 @@ export const runActivity = (
   switch (activity.type) {
     case "craftItem": {
       return runCraftItemActivity(client, agent, activity);
+    }
+    case "equipItem": {
+      return runEquipItemActivity(client, agent, activity);
     }
     case "farmResource": {
       return runFarmingCycle(client, agent, activity.resourceCode);

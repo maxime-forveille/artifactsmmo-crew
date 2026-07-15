@@ -4,6 +4,7 @@ import type { ArtifactsApiError, ArtifactsClient } from "../../client/index.js";
 import type { components } from "../../client/schema.js";
 import { logger } from "../../utils/logger.js";
 import { InsufficientCraftingLevelError, NotCraftableItemError } from "./crafting.js";
+import { UnsupportedEquipSlotError } from "./equipping.js";
 import type { CharacterAgent } from "../runtime/characterAgent.js";
 import { fightSafely, isSafeToFight } from "../combat.js";
 import { EQUIP_SLOT_BY_ITEM_TYPE, equippedItemInSlot, SLOT_FIELD } from "../gear.js";
@@ -21,16 +22,6 @@ import {
 
 type EquipSlot = components["schemas"]["ItemSlot"];
 type Item = components["schemas"]["ItemSchema"];
-
-export class UnsupportedEquipSlotError extends Error {
-  constructor(
-    public readonly itemCode: string,
-    public readonly itemType: string,
-  ) {
-    super(`Don't know which equipment slot fits item type "${itemType}" (item "${itemCode}")`);
-    this.name = "UnsupportedEquipSlotError";
-  }
-}
 
 export class InventoryFullError extends Error {
   constructor(public readonly itemCode: string) {

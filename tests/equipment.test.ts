@@ -2,12 +2,8 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
 import { InsufficientCraftingLevelError } from "../src/bot/activities/crafting.js";
-import {
-  craftAndEquip,
-  craftItem,
-  UnsafeMonsterError,
-  UnsupportedEquipSlotError,
-} from "../src/bot/activities/equipment.js";
+import { craftAndEquip, craftItem, UnsafeMonsterError } from "../src/bot/activities/equipment.js";
+import { UnsupportedEquipSlotError } from "../src/bot/activities/equipping.js";
 import { MonsterNotFoundError } from "../src/bot/world.js";
 import { ArtifactsApiError } from "../src/client/index.js";
 import type { components } from "../src/client/schema.js";

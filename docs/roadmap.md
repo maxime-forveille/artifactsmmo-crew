@@ -72,9 +72,9 @@ new orchestration Interface.
 - [x] Reuse the existing farming and hunting cycles.
 - [x] Add targeted craft execution that does not acquire missing inputs
       recursively.
-- [ ] Add targeted equip execution that does not craft missing equipment
+- [x] Add targeted equip execution that does not craft missing equipment
       recursively.
-- [ ] Return typed Blockers for missing prerequisites.
+- [x] Return typed Blockers for missing prerequisites.
 
 ### 3. Rolling scheduler
 
