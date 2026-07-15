@@ -1008,6 +1008,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/my/{name}/action/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Action Rename
+         * @description Rename a character. An active membership is required.
+         */
+        post: operations["action_rename_my__name__action_rename_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/my/logs": {
         parameters: {
             query?: never;
@@ -5718,6 +5738,35 @@ export interface components {
              * @default false
              */
             enhanced: boolean;
+        };
+        /** RenameCharacterDataSchema */
+        RenameCharacterDataSchema: {
+            /** @description Cooldown details. */
+            cooldown: components["schemas"]["CooldownSchema"];
+            /**
+             * Old Name
+             * @description Previous character name.
+             */
+            old_name: string;
+            /**
+             * New Name
+             * @description New character name.
+             */
+            new_name: string;
+            /** @description Player details. */
+            character: components["schemas"]["CharacterSchema"];
+        };
+        /** RenameCharacterSchema */
+        RenameCharacterSchema: {
+            /**
+             * Name
+             * @description Your desired character name. It's unique and all players can see it.
+             */
+            name: string;
+        };
+        /** RenameResponseSchema */
+        RenameResponseSchema: {
+            data: components["schemas"]["RenameCharacterDataSchema"];
         };
         /** ResourceResponseSchema */
         ResourceResponseSchema: {
@@ -12555,6 +12604,140 @@ export interface operations {
                      *       "error": {
                      *         "code": 550,
                      *         "message": "You cannot choose this skin because you do not own it."
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponseSchema"];
+                };
+            };
+        };
+    };
+    action_rename_my__name__action_rename_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Current name of your character. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameCharacterSchema"];
+            };
+        };
+        responses: {
+            /** @description Character successfully renamed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenameResponseSchema"];
+                };
+            };
+            /** @description Character not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": 404,
+                     *         "message": "Character not found."
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponseSchema"];
+                };
+            };
+            /** @description Request could not be processed due to an invalid payload. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": 422,
+                     *         "message": "Request could not be processed due to an invalid payload.",
+                     *         "data": {
+                     *           "field_name": [
+                     *             "Field required"
+                     *           ]
+                     *         }
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponseSchema"];
+                };
+            };
+            /** @description Access denied, you must be a member to do that. */
+            451: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": 451,
+                     *         "message": "Access denied, you must be a member to do that."
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponseSchema"];
+                };
+            };
+            /** @description An action is already in progress for this character. */
+            486: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": 486,
+                     *         "message": "An action is already in progress for this character."
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponseSchema"];
+                };
+            };
+            /** @description This name is already in use. */
+            494: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": 494,
+                     *         "message": "This name is already in use."
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponseSchema"];
+                };
+            };
+            /** @description The character is in cooldown. */
+            499: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": 499,
+                     *         "message": "The character is in cooldown."
                      *       }
                      *     }
                      */
