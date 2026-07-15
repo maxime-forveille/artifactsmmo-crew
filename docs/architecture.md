@@ -113,6 +113,19 @@ endpoint, so `capturedAt` records when both reads completed.
 cross-character rule can assign the strongest eligible gatherer to a fixed
 resource until an explicit bank threshold is reached.
 
+`orchestration/orchestratorState.ts` defines crew-level Goals in explicit
+priority order and serializable Activity assignments. Each assignment
+identifies its Goal, character, Activity, and intended item production or
+consumption. It becomes a Reservation only after the runtime starts that
+Activity successfully; runtime promises and cancellation handles remain
+outside orchestration state.
+
+`orchestration/resourceReplenishment.ts` provides the first Activity-aware pure
+transition. It completes a satisfied unreserved bank Goal, avoids work already
+reserved, excludes busy characters, and otherwise proposes one `farmResource`
+Activity for the strongest eligible gatherer. The exact resource remains an
+explicit planning input until source-selection policy is designed.
+
 The final orchestrator will emit Activities instead of `autoXXX` tasks.
 Persistent Goals will survive across several Activities while Reservations
 record work already in flight.

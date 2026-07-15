@@ -1,10 +1,18 @@
 import { err, ok, type Result } from "neverthrow";
 
-import type { components } from "../../client/schema.js";
 import type { TaskAssignment } from "../../utils/taskAssignments.js";
 import type { CrewSnapshot } from "./crewSnapshot.js";
-import { skillLevel } from "../progression.js";
+import {
+  findBestGatherer,
+  InvalidResourceTargetError,
+  NoEligibleGathererError,
+  type Resource,
+  type ResourceReplenishmentError,
+} from "./resourceReplenishment.js";
 import type { Task } from "../tasks/task.js";
+
+export { InvalidResourceTargetError, NoEligibleGathererError };
+export type { ResourceReplenishmentError };
 
 type Character = CrewSnapshot["characters"][number];
 
@@ -15,33 +23,11 @@ export type CrewDecisionContext = Readonly<{
 
 export type CrewPolicy = (context: CrewDecisionContext) => Task;
 
-type Resource = Readonly<components["schemas"]["ResourceSchema"]>;
-
 export type ResourceReplenishmentTarget = Readonly<{
   itemCode: string;
   minimumBankQuantity: number;
   resource: Resource;
 }>;
-
-export class InvalidResourceTargetError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "InvalidResourceTargetError";
-  }
-}
-
-export class NoEligibleGathererError extends Error {
-  constructor(
-    public readonly resourceCode: string,
-    public readonly skill: Resource["skill"],
-    public readonly requiredLevel: number,
-  ) {
-    super(`No character can gather ${resourceCode}: ${skill} level ${requiredLevel} is required`);
-    this.name = "NoEligibleGathererError";
-  }
-}
-
-export type ResourceReplenishmentError = InvalidResourceTargetError | NoEligibleGathererError;
 
 /**
  * Safe baseline while richer cross-character priorities are still being
@@ -71,24 +57,6 @@ const bankQuantity = (snapshot: CrewSnapshot, itemCode: string): number =>
     .filter((item) => item.code === itemCode)
     .reduce((total, item) => total + item.quantity, 0);
 
-const bestGatherer = (snapshot: CrewSnapshot, resource: Resource): Character | undefined =>
-  snapshot.characters
-    .filter((character) => skillLevel(character, resource.skill) >= resource.level)
-    .reduce<Character | undefined>((best, character) => {
-      if (best === undefined) {
-        return character;
-      }
-
-      const level = skillLevel(character, resource.skill);
-      const bestLevel = skillLevel(best, resource.skill);
-
-      if (level !== bestLevel) {
-        return level > bestLevel ? character : best;
-      }
-
-      return character.name.localeCompare(best.name) < 0 ? character : best;
-    }, undefined);
-
 /**
  * Proposes one temporary fixed-resource farming assignment when the shared
  * bank is below an explicit target. Everyone else keeps the conservative
@@ -113,7 +81,7 @@ export const proposeResourceReplenishment = (
     return ok(proposeCrewAssignments(snapshot));
   }
 
-  const gatherer = bestGatherer(snapshot, target.resource);
+  const gatherer = findBestGatherer(snapshot, target.resource);
 
   if (gatherer === undefined) {
     return err(

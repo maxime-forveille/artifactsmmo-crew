@@ -61,10 +61,10 @@ new orchestration Interface.
 
 ### 1. Orchestrator state
 
-- [ ] Define plain-data Goals and Reservations.
-- [ ] Keep runtime promises and cancellation handles outside state.
+- [x] Define plain-data Goals and Reservations.
+- [x] Keep runtime promises and cancellation handles outside state.
 - [ ] Define pure state transitions for Activity completion and Blockers.
-- [ ] Decide initial crew-level Goal ownership and priority ordering.
+- [x] Use crew-level Goals ordered explicitly by priority.
 
 ### 2. Activity execution
 
