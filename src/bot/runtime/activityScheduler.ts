@@ -19,10 +19,10 @@ export type ActivityPlanner<EPlan extends Error> = (
   state: OrchestratorState,
 ) => Result<ActivityPlan, EPlan>;
 
-export type ActivityStarter<EActivity extends Error> = (
+export type ActivityStarter<EActivity extends Error, EStart extends Error = StartActivityError> = (
   state: OrchestratorState,
   assignment: ActivityAssignment<ExecutableActivity>,
-) => Result<LaunchedActivity<EActivity>, StartActivityError>;
+) => Result<LaunchedActivity<EActivity>, EStart>;
 
 export type ScheduledActivities<EActivity extends Error> = Readonly<{
   running: readonly LaunchedActivity<EActivity>[];
@@ -45,12 +45,16 @@ const validatePlanStarts = (
  * Validation prevents a malformed multi-Activity plan from starting only a
  * prefix before discovering a duplicate character or missing Goal.
  */
-export const scheduleActivities = <EActivity extends Error, EPlan extends Error>(
+export const scheduleActivities = <
+  EActivity extends Error,
+  EPlan extends Error,
+  EStart extends Error = StartActivityError,
+>(
   snapshot: CrewSnapshot,
   state: OrchestratorState,
   plan: ActivityPlanner<EPlan>,
-  start: ActivityStarter<EActivity>,
-): Result<ScheduledActivities<EActivity>, EPlan | StartActivityError> => {
+  start: ActivityStarter<EActivity, EStart>,
+): Result<ScheduledActivities<EActivity>, EPlan | EStart | StartActivityError> => {
   const planned = plan(snapshot, state);
 
   if (planned.isErr()) {

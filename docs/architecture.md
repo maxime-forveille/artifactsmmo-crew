@@ -53,7 +53,9 @@ The client also owns account-wide request protection:
 ## Runtime
 
 `runtime/characterAgent.ts` tracks one character's latest state from Action
-responses and waits out cooldowns before sending the next Action.
+responses and waits out cooldowns before sending the next Action. Agents can be
+seeded directly from the initial Crew Snapshot, avoiding one duplicate character
+read per crew member at startup.
 
 `runtime/activityDispatcher.ts` executes one already-selected bounded Activity
 with an existing Character Agent. It currently dispatches `farmResource` and
@@ -63,9 +65,9 @@ policy remain outside the dispatcher.
 `runtime/activityLauncher.ts` atomically reserves an idle character and starts
 one dispatched Activity. It retries failures classified as transient without
 releasing the Reservation or invoking policy, then emits a completed, blocked,
-or cancelled terminal outcome. Concrete error-to-disposition classification
-remains a separate boundary while existing Activities still return their
-transitional raw error unions.
+or cancelled terminal outcome. Error-to-disposition classification remains an
+injected boundary while existing Activities still return their transitional raw
+error unions.
 
 `runtime/activityEventProcessor.ts` serializes those terminal outcomes against
 the latest shared state. It releases the matching Reservation, preserves Goals
@@ -87,6 +89,12 @@ handled. Snapshot failures classified as retryable wait and retry inside the
 same event, so policy never runs on stale observation. Expected and unexpected
 asynchronous failures are reported without leaving stale Reservations in
 runtime state.
+
+`runtime/crewRuntime.ts` is the concrete Artifacts adapter. It reads the initial
+snapshot, seeds Character Agents, dispatches bounded Activities, classifies
+transport/server failures for retry, and refreshes observations. Goals, policy,
+reporting, and retry timing remain explicit inputs; the adapter does not invent
+bank thresholds or autonomous priorities.
 
 `runtime/taskSupervisor.ts` currently supervises long-running tasks with one
 `AbortController` per character. Its useful behavior should survive the

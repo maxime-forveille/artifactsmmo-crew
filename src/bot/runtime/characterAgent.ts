@@ -5,13 +5,13 @@ import type { components } from "../../client/schema.js";
 import { type Cooldown, msUntilExpiration, waitUntil } from "../../utils/cooldown.js";
 import { logger } from "../../utils/logger.js";
 
-type CharacterSnapshot = components["schemas"]["CharacterSchema"];
+export type CharacterSnapshot = components["schemas"]["CharacterSchema"];
 type Destination = components["schemas"]["DestinationSchema"];
 type EquipItem = components["schemas"]["EquipSchema"];
 type SimpleItem = components["schemas"]["SimpleItemSchema"];
 type UnequipItem = components["schemas"]["UnequipSchema"];
 
-type CharacterAgentDependencies = Pick<
+export type CharacterAgentDependencies = Pick<
   ArtifactsClient,
   | "craft"
   | "depositGold"
@@ -162,6 +162,12 @@ const buildCharacterAgent = (
 };
 
 export type CharacterAgent = ReturnType<typeof buildCharacterAgent>;
+
+/** Creates an Agent from a character already present in a Crew Snapshot. */
+export const createCharacterAgentFromSnapshot = (
+  client: CharacterAgentDependencies,
+  initial: CharacterSnapshot,
+): CharacterAgent => buildCharacterAgent(client, initial.name, initial);
 
 /**
  * Creates a stateful, cooldown-aware wrapper around `ArtifactsClient` for a

@@ -86,6 +86,7 @@ new orchestration Interface.
 - [x] Retry Transient Failures without invoking policy again.
 - [x] Return Blockers to policy with their Goal preserved.
 - [x] Retry failed Crew Snapshot refreshes before replanning.
+- [x] Wire the coordinator to Character Agents and the Artifacts client.
 
 ### 4. Extract existing automatic decisions
 

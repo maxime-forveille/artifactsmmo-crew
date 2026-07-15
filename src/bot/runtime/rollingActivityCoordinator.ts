@@ -20,29 +20,30 @@ export type RollingActivityPlanner<EActivity extends Error, EPlan extends Error>
   previousOutcome?: ActivityRunOutcome<EActivity>,
 ) => Result<ActivityPlan, EPlan>;
 
-export type RollingActivityCoordinatorError<EPlan extends Error, ESnapshot extends Error> =
-  | EPlan
-  | ESnapshot
-  | FinishActivityError
-  | StartActivityError;
+export type RollingActivityCoordinatorError<
+  EPlan extends Error,
+  ESnapshot extends Error,
+  EStart extends Error,
+> = EPlan | ESnapshot | EStart | FinishActivityError | StartActivityError;
 
 type RollingActivityCoordinatorDependencies<
   EActivity extends Error,
   EPlan extends Error,
   ESnapshot extends Error,
+  EStart extends Error,
 > = Readonly<{
   plan: RollingActivityPlanner<EActivity, EPlan>;
   refreshSnapshot: () => ResultAsync<CrewSnapshot, ESnapshot>;
   reportError: (error: unknown) => void;
   shouldRetrySnapshotFailure: (error: ESnapshot) => boolean;
-  startActivity: ActivityStarter<EActivity>;
+  startActivity: ActivityStarter<EActivity, EStart>;
   waitBeforeSnapshotRetry: () => Promise<void>;
 }>;
 
-type RollingActivityCoordinator<EPlan extends Error> = Readonly<{
+export type RollingActivityCoordinator<EPlan extends Error, EStart extends Error> = Readonly<{
   getSnapshot: () => CrewSnapshot;
   getState: () => OrchestratorState;
-  start: () => Result<void, EPlan | StartActivityError>;
+  start: () => Result<void, EPlan | EStart | StartActivityError>;
   waitForIdle: () => Promise<void>;
 }>;
 
@@ -55,11 +56,12 @@ export const createRollingActivityCoordinator = <
   EActivity extends Error,
   EPlan extends Error,
   ESnapshot extends Error,
+  EStart extends Error = StartActivityError,
 >(
   initialState: OrchestratorState,
   initialSnapshot: CrewSnapshot,
-  dependencies: RollingActivityCoordinatorDependencies<EActivity, EPlan, ESnapshot>,
-): RollingActivityCoordinator<EPlan> => {
+  dependencies: RollingActivityCoordinatorDependencies<EActivity, EPlan, ESnapshot, EStart>,
+): RollingActivityCoordinator<EPlan, EStart> => {
   let pendingEvents = 0;
   let queue: Promise<void> = Promise.resolve();
   let runningActivities = 0;
@@ -127,7 +129,7 @@ export const createRollingActivityCoordinator = <
 
   const schedule = (
     previousOutcome?: ActivityRunOutcome<EActivity>,
-  ): Result<void, EPlan | StartActivityError> => {
+  ): Result<void, EPlan | EStart | StartActivityError> => {
     const scheduled = scheduleActivities(
       snapshot,
       state,
@@ -172,7 +174,7 @@ export const createRollingActivityCoordinator = <
     }
   };
 
-  const start = (): Result<void, EPlan | StartActivityError> => {
+  const start = (): Result<void, EPlan | EStart | StartActivityError> => {
     const result = schedule();
     notifyIfIdle();
     return result;
