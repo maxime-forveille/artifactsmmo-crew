@@ -78,12 +78,12 @@ new orchestration Interface.
 
 ### 3. Rolling scheduler
 
-- [ ] Run at most one Activity per character.
+- [x] Run at most one Activity per character.
 - [ ] Serialize simultaneous completion events.
 - [ ] Refresh the Crew Snapshot after an Activity finishes.
 - [ ] Schedule only idle characters.
-- [ ] Keep in-flight Reservations visible to policy.
-- [ ] Retry Transient Failures without invoking policy again.
+- [x] Keep in-flight Reservations visible to policy.
+- [x] Retry Transient Failures without invoking policy again.
 - [ ] Return Blockers to policy with their Goal preserved.
 
 ### 4. Extract existing automatic decisions
