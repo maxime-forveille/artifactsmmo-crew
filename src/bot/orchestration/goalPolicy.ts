@@ -81,12 +81,15 @@ export const rankGoalCandidates = (
 };
 
 const characterNameForGoal = (goal: Goal): string | undefined =>
-  goal.type === 'equipItem' ? goal.characterName : undefined;
+  'characterName' in goal ? goal.characterName : undefined;
 
 const conflictKeyForGoal = (goal: Goal): string => {
   switch (goal.type) {
     case 'equipItem': {
       return `${goal.type}:${goal.characterName}:${goal.itemCode}`;
+    }
+    case 'reachCombatLevel': {
+      return `${goal.type}:${goal.characterName}:${goal.targetLevel}`;
     }
     case 'replenishBankItem': {
       return `${goal.type}:${goal.itemCode}`;
@@ -98,7 +101,7 @@ const conflictKeyForGoal = (goal: Goal): string => {
   }
 };
 
-const goalsConflict = (left: Goal, right: Goal): boolean =>
+export const areGoalsEquivalent = (left: Goal, right: Goal): boolean =>
   left.id === right.id ||
   conflictKeyForGoal(left) === conflictKeyForGoal(right);
 
@@ -118,8 +121,12 @@ export const selectCompatibleGoals = (
     );
 
     if (
-      otherActiveGoals.some((goal) => goalsConflict(goal, candidate.goal)) ||
-      proposals.some((proposal) => goalsConflict(proposal.goal, candidate.goal))
+      otherActiveGoals.some((goal) =>
+        areGoalsEquivalent(goal, candidate.goal),
+      ) ||
+      proposals.some((proposal) =>
+        areGoalsEquivalent(proposal.goal, candidate.goal),
+      )
     ) {
       continue;
     }

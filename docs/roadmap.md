@@ -114,11 +114,11 @@ new orchestration Interface.
 - [x] Implement `createGoalPolicy` with a `proposeGoals` façade.
 - [x] Split policy into `discoverGoalCandidates`, `rankGoalCandidates`, and
       `selectCompatibleGoals`.
-- [ ] Give generated Goals stable semantic IDs and prevent equivalent active
+- [x] Give generated Goals stable semantic IDs and prevent equivalent active
       Goals from being proposed twice.
 - [ ] Keep safety, Reservations, resource protection, and prerequisites outside
       configurable strategy order.
-- [ ] Add the first automatically generated finite progression Goal.
+- [x] Add the first automatically generated finite progression Goal.
 - [ ] Preserve a blocked parent Goal while inserting its prerequisite Goal ahead
       of it.
 

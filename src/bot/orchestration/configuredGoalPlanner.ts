@@ -166,18 +166,20 @@ export const createConfiguredGoalPlanner = (
                     materialItemsByGoalId.get(goal.id) ?? [],
                   );
             })()
-          : (() => {
-              const resource = resourcesByGoalId.get(goal.id);
+          : goal.type === 'replenishBankItem'
+            ? (() => {
+                const resource = resourcesByGoalId.get(goal.id);
 
-              return resource === undefined
-                ? err(new GoalResourceNotResolvedError(goal.id))
-                : planResourceReplenishment(
-                    snapshot,
-                    planningState,
-                    resource,
-                    state.reservations,
-                  );
-            })();
+                return resource === undefined
+                  ? err(new GoalResourceNotResolvedError(goal.id))
+                  : planResourceReplenishment(
+                      snapshot,
+                      planningState,
+                      resource,
+                      state.reservations,
+                    );
+              })()
+            : ok({ activities: [], state: planningState });
 
       if (planned.isErr()) {
         return err(planned.error);

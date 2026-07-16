@@ -7,6 +7,13 @@ export type EquipItemGoal = Readonly<{
   type: 'equipItem';
 }>;
 
+export type ReachCombatLevelGoal = Readonly<{
+  characterName: string;
+  id: string;
+  targetLevel: number;
+  type: 'reachCombatLevel';
+}>;
+
 export type ReplenishBankItemGoal = Readonly<{
   id: string;
   itemCode: string;
@@ -14,7 +21,7 @@ export type ReplenishBankItemGoal = Readonly<{
   type: 'replenishBankItem';
 }>;
 
-export type Goal = EquipItemGoal | ReplenishBankItemGoal;
+export type Goal = EquipItemGoal | ReachCombatLevelGoal | ReplenishBankItemGoal;
 
 export type ItemIntent = Readonly<{
   itemCode: string;

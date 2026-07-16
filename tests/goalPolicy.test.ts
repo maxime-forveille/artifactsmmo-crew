@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { CrewSnapshot } from '../src/bot/orchestration/crewSnapshot.js';
 import {
+  areGoalsEquivalent,
   createGoalPolicy,
   discoverGoalCandidates,
   rankGoalCandidates,
@@ -13,6 +14,7 @@ import {
 import type {
   EquipItemGoal,
   OrchestratorState,
+  ReachCombatLevelGoal,
   ReplenishBankItemGoal,
 } from '../src/bot/orchestration/orchestratorState.js';
 import type { WorldKnowledge } from '../src/bot/orchestration/worldKnowledge.js';
@@ -22,6 +24,17 @@ const buildEquipGoal = (
   characterName: string,
   itemCode: string,
 ): EquipItemGoal => ({ characterName, id, itemCode, type: 'equipItem' });
+
+const buildReachCombatLevelGoal = (
+  id: string,
+  characterName: string,
+  targetLevel: number,
+): ReachCombatLevelGoal => ({
+  characterName,
+  id,
+  targetLevel,
+  type: 'reachCombatLevel',
+});
 
 const buildReplenishmentGoal = (
   id: string,
@@ -207,6 +220,26 @@ describe('rankGoalCandidates', () => {
     ]);
   });
 
+  it('ranks utility before the stable Goal id tie-breaker', () => {
+    const ranked = rankGoalCandidates(
+      [
+        buildCandidate({
+          goal: buildEquipGoal('a-low-utility', 'Stan', 'copper_helmet'),
+        }),
+        buildCandidate({
+          goal: buildEquipGoal('z-high-utility', 'Kyle', 'copper_helmet'),
+          utility: 1,
+        }),
+      ],
+      config,
+    );
+
+    expect(ranked.map((candidate) => candidate.goal.id)).toEqual([
+      'z-high-utility',
+      'a-low-utility',
+    ]);
+  });
+
   it('puts candidates from an unconfigured rule last', () => {
     const ranked = rankGoalCandidates(
       [
@@ -227,6 +260,62 @@ describe('rankGoalCandidates', () => {
       ['configured', 0],
       ['unconfigured', Number.MAX_SAFE_INTEGER],
     ]);
+  });
+});
+
+describe('areGoalsEquivalent', () => {
+  it('compares the semantic target of every Goal type', () => {
+    expect(
+      areGoalsEquivalent(
+        buildEquipGoal('equip-a', 'Stan', 'copper_dagger'),
+        buildEquipGoal('equip-b', 'Stan', 'copper_dagger'),
+      ),
+    ).toBe(true);
+    expect(
+      areGoalsEquivalent(
+        buildEquipGoal('equip-a', 'Stan', 'copper_dagger'),
+        buildEquipGoal('equip-b', 'Kyle', 'copper_dagger'),
+      ),
+    ).toBe(false);
+    expect(
+      areGoalsEquivalent(
+        buildEquipGoal('equip-a', 'Stan', 'copper_dagger'),
+        buildEquipGoal('equip-b', 'Stan', 'copper_helmet'),
+      ),
+    ).toBe(false);
+    expect(
+      areGoalsEquivalent(
+        buildReachCombatLevelGoal('combat-a', 'Stan', 7),
+        buildReachCombatLevelGoal('combat-b', 'Stan', 7),
+      ),
+    ).toBe(true);
+    expect(
+      areGoalsEquivalent(
+        buildReachCombatLevelGoal('combat-a', 'Stan', 7),
+        buildReachCombatLevelGoal('combat-b', 'Stan', 8),
+      ),
+    ).toBe(false);
+    expect(
+      areGoalsEquivalent(
+        buildReplenishmentGoal('bank-a', 'copper_ore'),
+        buildReplenishmentGoal('bank-b', 'copper_ore'),
+      ),
+    ).toBe(true);
+    expect(
+      areGoalsEquivalent(
+        buildReplenishmentGoal('bank-a', 'copper_ore'),
+        buildReplenishmentGoal('bank-b', 'ash_wood'),
+      ),
+    ).toBe(false);
+  });
+
+  it('treats ids as globally unique across Goal types', () => {
+    expect(
+      areGoalsEquivalent(
+        buildEquipGoal('shared-id', 'Stan', 'copper_dagger'),
+        buildReachCombatLevelGoal('shared-id', 'Kyle', 7),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -297,6 +386,69 @@ describe('selectCompatibleGoals', () => {
       'kyle-first',
       'replenish-ash',
     ]);
+  });
+
+  it('rejects a combat Goal for a reserved character', () => {
+    const state = buildState({
+      reservations: [
+        {
+          activity: { monsterCode: 'chicken', type: 'huntMonster' },
+          characterName: 'Stan',
+          consumes: [],
+          goalId: 'active-combat',
+          produces: [],
+        },
+      ],
+    });
+    const candidate = {
+      ...buildCandidate({
+        goal: buildReachCombatLevelGoal('combat-stan', 'Stan', 7),
+        rule: 'combatProgression',
+      }),
+      configuredRank: 1,
+    };
+
+    expect(selectCompatibleGoals([candidate], state)).toEqual([]);
+  });
+
+  it('rejects a combat Goal when that character already has an active Goal', () => {
+    const state = buildState({
+      goals: [buildEquipGoal('equip-stan', 'Stan', 'copper_dagger')],
+    });
+    const candidate = {
+      ...buildCandidate({
+        goal: buildReachCombatLevelGoal('combat-stan', 'Stan', 7),
+        rule: 'combatProgression',
+      }),
+      configuredRank: 1,
+    };
+
+    expect(selectCompatibleGoals([candidate], state)).toEqual([]);
+  });
+
+  it('selects combat Goals for different characters at the same level', () => {
+    const candidates = [
+      {
+        ...buildCandidate({
+          goal: buildReachCombatLevelGoal('combat-stan', 'Stan', 7),
+          rule: 'combatProgression',
+        }),
+        configuredRank: 1,
+      },
+      {
+        ...buildCandidate({
+          goal: buildReachCombatLevelGoal('combat-kyle', 'Kyle', 7),
+          rule: 'combatProgression',
+        }),
+        configuredRank: 1,
+      },
+    ];
+
+    expect(
+      selectCompatibleGoals(candidates, buildState()).map(
+        (proposal) => proposal.goal.id,
+      ),
+    ).toEqual(['combat-stan', 'combat-kyle']);
   });
 
   it('treats Goal ids as unique across Goal types', () => {
