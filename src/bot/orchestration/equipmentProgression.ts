@@ -97,12 +97,6 @@ const unchangedPlan = (state: OrchestratorState): EquipmentProgressionPlan => ({
   state,
 });
 
-type MissingDirectMaterial = Readonly<{
-  bankedQuantity: number;
-  itemCode: string;
-  missingQuantity: number;
-}>;
-
 type EquipmentStep = Readonly<{
   activity: EquipmentActivity;
   characterName: string;
@@ -110,25 +104,9 @@ type EquipmentStep = Readonly<{
   produces: readonly { itemCode: string }[];
 }>;
 
-const missingDirectMaterialFor = (
-  snapshot: CrewSnapshot,
-  character: Character,
-  item: Item,
-): MissingDirectMaterial | undefined =>
-  (item.craft?.items ?? [])
-    .map((material): MissingDirectMaterial => {
-      const missingQuantity = Math.max(
-        material.quantity - heldQuantity(character, material.code),
-        0,
-      );
-
-      return {
-        bankedQuantity: Math.min(missingQuantity, bankQuantity(snapshot, material.code)),
-        itemCode: material.code,
-        missingQuantity,
-      };
-    })
-    .find((material) => material.missingQuantity > 0);
+type ItemProgress =
+  | Readonly<{ status: "step"; step: EquipmentStep }>
+  | Readonly<{ status: "unresolved" | "waiting" }>;
 
 const reservedCharacterNames = (state: OrchestratorState): ReadonlySet<string> =>
   new Set(state.reservations.map((reservation) => reservation.characterName));
@@ -166,14 +144,14 @@ const findBestHunter = (
 const acquisitionStepFor = (
   snapshot: CrewSnapshot,
   state: OrchestratorState,
-  material: MissingDirectMaterial,
+  itemCode: string,
   resolved: EquipmentMaterialSource,
 ): Result<EquipmentStep | undefined, EquipmentProgressionError> => {
   if (resolved.source.type === "gather") {
     const { resource } = resolved.source;
 
-    if (!resource.drops.some((drop) => drop.code === material.itemCode)) {
-      return err(new InvalidEquipmentMaterialSourceError(material.itemCode, resource.code));
+    if (!resource.drops.some((drop) => drop.code === itemCode)) {
+      return err(new InvalidEquipmentMaterialSourceError(itemCode, resource.code));
     }
 
     const eligibleGatherer = findBestGatherer(snapshot, resource);
@@ -191,21 +169,21 @@ const acquisitionStepFor = (
             activity: { resourceCode: resource.code, type: "farmResource" },
             characterName: gatherer.name,
             consumes: [],
-            produces: [{ itemCode: material.itemCode }],
+            produces: [{ itemCode }],
           },
     );
   }
 
   const { monster } = resolved.source;
 
-  if (!monster.drops.some((drop) => drop.code === material.itemCode)) {
-    return err(new InvalidEquipmentMaterialSourceError(material.itemCode, monster.code));
+  if (!monster.drops.some((drop) => drop.code === itemCode)) {
+    return err(new InvalidEquipmentMaterialSourceError(itemCode, monster.code));
   }
 
   const eligibleHunter = findBestHunter(snapshot, monster);
 
   if (eligibleHunter === undefined) {
-    return err(new NoSafeEquipmentMaterialHunterError(material.itemCode, monster.code));
+    return err(new NoSafeEquipmentMaterialHunterError(itemCode, monster.code));
   }
 
   const hunter = findBestHunter(snapshot, monster, reservedCharacterNames(state));
@@ -217,9 +195,129 @@ const acquisitionStepFor = (
           activity: { monsterCode: monster.code, type: "huntMonster" },
           characterName: hunter.name,
           consumes: [],
-          produces: [{ itemCode: material.itemCode }],
+          produces: [{ itemCode }],
         },
   );
+};
+
+const withdrawStep = (
+  characterName: string,
+  itemCode: string,
+  quantity: number,
+): EquipmentStep => ({
+  activity: { itemCode, quantity, type: "withdrawItem" },
+  characterName,
+  consumes: [{ itemCode }],
+  produces: [],
+});
+
+const craftStep = (characterName: string, itemCode: string, quantity: number): EquipmentStep => ({
+  activity: { itemCode, quantity, type: "craftItem" },
+  characterName,
+  consumes: [],
+  produces: [{ itemCode }],
+});
+
+const planHeldItem = (
+  snapshot: CrewSnapshot,
+  state: OrchestratorState,
+  character: Character,
+  item: Item,
+  requiredQuantity: number,
+  itemsByCode: ReadonlyMap<string, Item>,
+  sourcesByItemCode: ReadonlyMap<string, EquipmentMaterialSource>,
+  ancestors: ReadonlySet<string>,
+): Result<ItemProgress, EquipmentProgressionError> => {
+  if (ancestors.has(item.code)) {
+    return ok({ status: "unresolved" });
+  }
+
+  const missingQuantity = requiredQuantity - heldQuantity(character, item.code);
+  const craftingSkill = item.craft?.skill;
+
+  if (craftingSkill === undefined) {
+    const resolvedSource = sourcesByItemCode.get(item.code);
+
+    if (resolvedSource === undefined) {
+      return ok({ status: "unresolved" });
+    }
+
+    return acquisitionStepFor(snapshot, state, item.code, resolvedSource).map((step) =>
+      step === undefined ? { status: "waiting" } : { status: "step", step },
+    );
+  }
+
+  const craftQuantity = Math.ceil(missingQuantity / (item.craft?.quantity ?? 1));
+  const requiredCraftingLevel = item.craft?.level ?? 0;
+
+  if (craftSkillLevel(character, craftingSkill) < requiredCraftingLevel) {
+    return ok({
+      status: "step",
+      step: craftStep(character.name, item.code, craftQuantity),
+    });
+  }
+
+  const nextAncestors = new Set([...ancestors, item.code]);
+
+  for (const material of item.craft?.items ?? []) {
+    const requiredMaterialQuantity = material.quantity * craftQuantity;
+    const missingMaterialQuantity = Math.max(
+      requiredMaterialQuantity - heldQuantity(character, material.code),
+      0,
+    );
+
+    if (missingMaterialQuantity === 0) {
+      continue;
+    }
+
+    const bankedMaterialQuantity = Math.min(
+      missingMaterialQuantity,
+      bankQuantity(snapshot, material.code),
+    );
+
+    if (bankedMaterialQuantity > 0) {
+      return ok({
+        status: "step",
+        step: withdrawStep(character.name, material.code, bankedMaterialQuantity),
+      });
+    }
+
+    const materialItem = itemsByCode.get(material.code);
+
+    if (materialItem === undefined) {
+      const source = sourcesByItemCode.get(material.code);
+
+      if (source === undefined) {
+        return ok({ status: "unresolved" });
+      }
+
+      return acquisitionStepFor(snapshot, state, material.code, source).map((step) =>
+        step === undefined ? { status: "waiting" } : { status: "step", step },
+      );
+    }
+
+    const materialProgress = planHeldItem(
+      snapshot,
+      state,
+      character,
+      materialItem,
+      requiredMaterialQuantity,
+      itemsByCode,
+      sourcesByItemCode,
+      nextAncestors,
+    );
+
+    if (materialProgress.isErr()) {
+      return err(materialProgress.error);
+    }
+
+    return ok(materialProgress.value);
+  }
+
+  return ok({
+    status: "step",
+    step: craftStep(character.name, item.code, craftQuantity),
+  });
 };
 
 /**
@@ -232,6 +330,7 @@ export const planEquipmentProgression = (
   item: Item,
   previousOutcome?: PreviousActivityOutcome,
   resolvedSources: readonly EquipmentMaterialSource[] = [],
+  resolvedItems: readonly Item[] = [],
 ): Result<EquipmentProgressionPlan, EquipmentProgressionError> => {
   const goal = state.goals[0];
 
@@ -316,68 +415,46 @@ export const planEquipmentProgression = (
     });
   }
 
-  const missingMaterial = missingDirectMaterialFor(snapshot, character, item);
-  const craftingSkill = item.craft?.skill;
-  const canCraftTarget =
-    craftingSkill !== undefined &&
-    craftSkillLevel(character, craftingSkill) >= (item.craft?.level ?? 0);
+  if (item.craft?.skill === undefined) {
+    const step: EquipmentStep = {
+      activity: { itemCode: item.code, type: "equipItem" },
+      characterName: character.name,
+      consumes: [{ itemCode: item.code }],
+      produces: [],
+    };
 
-  if (missingMaterial !== undefined && canCraftTarget) {
-    if (missingMaterial.bankedQuantity > 0) {
-      const activity: WithdrawItemActivity = {
-        itemCode: missingMaterial.itemCode,
-        quantity: missingMaterial.bankedQuantity,
-        type: "withdrawItem",
-      };
+    return ok({ activities: [{ ...step, goalId: goal.id }], state });
+  }
 
-      return ok({
-        activities: [
-          {
-            activity,
-            characterName: character.name,
-            consumes: [{ itemCode: activity.itemCode }],
-            goalId: goal.id,
-            produces: [],
-          },
-        ],
-        state,
-      });
-    }
+  const itemsByCode = new Map(
+    [item, ...resolvedItems].map((resolvedItem) => [resolvedItem.code, resolvedItem]),
+  );
+  const sourcesByItemCode = new Map(
+    resolvedSources.map((resolvedSource) => [resolvedSource.itemCode, resolvedSource]),
+  );
+  const progress = planHeldItem(
+    snapshot,
+    state,
+    character,
+    item,
+    1,
+    itemsByCode,
+    sourcesByItemCode,
+    new Set(),
+  );
 
-    const resolvedSource = resolvedSources.find(
-      (candidate) => candidate.itemCode === missingMaterial.itemCode,
-    );
+  if (progress.isErr()) {
+    return err(progress.error);
+  }
 
-    if (resolvedSource !== undefined) {
-      const acquisition = acquisitionStepFor(snapshot, state, missingMaterial, resolvedSource);
-
-      if (acquisition.isErr()) {
-        return err(acquisition.error);
-      }
-
-      return acquisition.value === undefined
-        ? ok(unchangedPlan(state))
-        : ok({
-            activities: [{ ...acquisition.value, goalId: goal.id }],
-            state,
-          });
-    }
+  if (progress.value.status === "waiting") {
+    return ok(unchangedPlan(state));
   }
 
   const step: EquipmentStep =
-    item.craft?.skill !== undefined
-      ? {
-          activity: { itemCode: item.code, quantity: 1, type: "craftItem" },
-          characterName: character.name,
-          consumes: [],
-          produces: [{ itemCode: item.code }],
-        }
-      : {
-          activity: { itemCode: item.code, type: "equipItem" },
-          characterName: character.name,
-          consumes: [{ itemCode: item.code }],
-          produces: [],
-        };
+    progress.value.status === "step"
+      ? progress.value.step
+      : craftStep(character.name, item.code, 1);
 
   return ok({ activities: [{ ...step, goalId: goal.id }], state });
 };

@@ -1,9 +1,10 @@
-import { ResultAsync } from "neverthrow";
+import { okAsync, ResultAsync } from "neverthrow";
 
 import {
   createConfiguredGoalPlanner,
   type ConfiguredGoalPlannerError,
   type ResolvedGoalItem,
+  type ResolvedGoalMaterialItem,
   type ResolvedGoalMaterialSource,
   type ResolvedGoalResource,
 } from "../orchestration/configuredGoalPlanner.js";
@@ -38,48 +39,131 @@ export const resolveConfiguredItems = (
     ),
   );
 
-export const resolveEquipmentMaterialSources = (
-  client: Pick<ArtifactsClient, "getMonsters" | "getResources">,
-  resolvedItems: readonly ResolvedGoalItem[],
-): ResultAsync<readonly ResolvedGoalMaterialSource[], ArtifactsApiError> =>
-  ResultAsync.combine(
-    resolvedItems.flatMap(({ goalId, item }) =>
-      [...new Set((item.craft?.items ?? []).map((material) => material.code))].map((itemCode) =>
-        ResultAsync.combine([
-          client.getMonsters({ drop: itemCode, size: 100 }),
-          client.getResources({ drop: itemCode, size: 100 }),
-        ]).map(([monsters, resources]): ResolvedGoalMaterialSource | undefined => {
-          if (monsters.data.length + resources.data.length !== 1) {
-            return undefined;
-          }
+type MaterialResolutionClient = Pick<ArtifactsClient, "getItem" | "getMonsters" | "getResources">;
 
-          const [monster] = monsters.data;
+type ResolvedEquipmentMaterials = Readonly<{
+  items: readonly ResolvedGoalMaterialItem[];
+  sources: readonly ResolvedGoalMaterialSource[];
+}>;
 
-          if (monster !== undefined) {
-            return {
-              goalId,
-              materialSource: {
-                itemCode,
-                source: { monster, type: "hunt" },
-              },
-            };
-          }
+const emptyMaterials = (): ResolvedEquipmentMaterials => ({ items: [], sources: [] });
 
-          const [resource] = resources.data;
+const mergeMaterials = (
+  groups: readonly ResolvedEquipmentMaterials[],
+): ResolvedEquipmentMaterials => ({
+  items: groups.flatMap((group) => group.items),
+  sources: groups.flatMap((group) => group.sources),
+});
 
-          return resource === undefined
-            ? undefined
-            : {
-                goalId,
-                materialSource: {
-                  itemCode,
-                  source: { resource, type: "gather" },
-                },
-              };
-        }),
+const resolveUniqueMaterialSource = (
+  client: Pick<MaterialResolutionClient, "getMonsters" | "getResources">,
+  goalId: string,
+  itemCode: string,
+): ResultAsync<ResolvedGoalMaterialSource | undefined, ArtifactsApiError> =>
+  ResultAsync.combine([
+    client.getMonsters({ drop: itemCode, size: 100 }),
+    client.getResources({ drop: itemCode, size: 100 }),
+  ]).map(([monsters, resources]) => {
+    if (monsters.data.length + resources.data.length !== 1) {
+      return undefined;
+    }
+
+    const [monster] = monsters.data;
+
+    if (monster !== undefined) {
+      return {
+        goalId,
+        materialSource: {
+          itemCode,
+          source: { monster, type: "hunt" },
+        },
+      };
+    }
+
+    const [resource] = resources.data;
+
+    return resource === undefined
+      ? undefined
+      : {
+          goalId,
+          materialSource: {
+            itemCode,
+            source: { resource, type: "gather" },
+          },
+        };
+  });
+
+const resolveMaterialTree = (
+  client: MaterialResolutionClient,
+  goalId: string,
+  itemCode: string,
+  ancestors: ReadonlySet<string>,
+): ResultAsync<ResolvedEquipmentMaterials, ArtifactsApiError> => {
+  if (ancestors.has(itemCode)) {
+    return okAsync(emptyMaterials());
+  }
+
+  return client.getItem(itemCode).andThen((response) => {
+    const item = response.data;
+    const resolvedItem = { goalId, item };
+
+    if (item.craft?.skill === undefined) {
+      return resolveUniqueMaterialSource(client, goalId, item.code).map((source) => ({
+        items: [resolvedItem],
+        sources: source === undefined ? [] : [source],
+      }));
+    }
+
+    const nextAncestors = new Set([...ancestors, item.code]);
+    const materialCodes = [...new Set((item.craft.items ?? []).map((material) => material.code))];
+
+    return ResultAsync.combine(
+      materialCodes.map((materialCode) =>
+        resolveMaterialTree(client, goalId, materialCode, nextAncestors),
       ),
-    ),
-  ).map((sources) => sources.filter((source) => source !== undefined));
+    ).map((children) => {
+      const descendants = mergeMaterials(children);
+      return {
+        items: [resolvedItem, ...descendants.items],
+        sources: descendants.sources,
+      };
+    });
+  });
+};
+
+const deduplicateMaterials = (
+  materials: ResolvedEquipmentMaterials,
+): ResolvedEquipmentMaterials => ({
+  items: [
+    ...new Map(
+      materials.items.map((resolved) => [`${resolved.goalId}:${resolved.item.code}`, resolved]),
+    ).values(),
+  ],
+  sources: [
+    ...new Map(
+      materials.sources.map((resolved) => [
+        `${resolved.goalId}:${resolved.materialSource.itemCode}`,
+        resolved,
+      ]),
+    ).values(),
+  ],
+});
+
+export const resolveEquipmentMaterials = (
+  client: MaterialResolutionClient,
+  resolvedItems: readonly ResolvedGoalItem[],
+): ResultAsync<ResolvedEquipmentMaterials, ArtifactsApiError> =>
+  ResultAsync.combine(
+    resolvedItems.flatMap(({ goalId, item }) => {
+      const materialCodes = [
+        ...new Set((item.craft?.items ?? []).map((material) => material.code)),
+      ];
+      const ancestors = new Set([item.code]);
+      return materialCodes.map((itemCode) =>
+        resolveMaterialTree(client, goalId, itemCode, ancestors),
+      );
+    }),
+  ).map((groups) => deduplicateMaterials(mergeMaterials(groups)));
 
 export const resolveConfiguredResources = (
   client: Pick<ArtifactsClient, "getResource">,
@@ -109,14 +193,15 @@ export const createConfiguredCrewRuntime = (
   resolveConfiguredItems(client, options.config).andThen((resolvedItems) =>
     ResultAsync.combine([
       resolveConfiguredResources(client, options.config),
-      resolveEquipmentMaterialSources(client, resolvedItems),
-    ]).andThen(([resolvedResources, resolvedMaterialSources]) =>
+      resolveEquipmentMaterials(client, resolvedItems),
+    ]).andThen(([resolvedResources, resolvedMaterials]) =>
       createCrewRuntime(client, {
         initialState: buildInitialOrchestratorState(options.config),
         plan: createConfiguredGoalPlanner(
           resolvedItems,
           resolvedResources,
-          resolvedMaterialSources,
+          resolvedMaterials.sources,
+          resolvedMaterials.items,
         ),
         reportError: options.reportError,
         waitBeforeRetry: options.waitBeforeRetry,

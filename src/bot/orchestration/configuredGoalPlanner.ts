@@ -27,6 +27,11 @@ export type ResolvedGoalItem = Readonly<{
   item: Item;
 }>;
 
+export type ResolvedGoalMaterialItem = Readonly<{
+  goalId: string;
+  item: Item;
+}>;
+
 export type ResolvedGoalMaterialSource = Readonly<{
   goalId: string;
   materialSource: EquipmentMaterialSource;
@@ -71,6 +76,7 @@ export const createConfiguredGoalPlanner = (
   resolvedItems: readonly ResolvedGoalItem[],
   resolvedResources: readonly ResolvedGoalResource[],
   resolvedMaterialSources: readonly ResolvedGoalMaterialSource[] = [],
+  resolvedMaterialItems: readonly ResolvedGoalMaterialItem[] = [],
 ): ConfiguredGoalPlanner => {
   const itemsByGoalId = new Map(resolvedItems.map(({ goalId, item }) => [goalId, item]));
   const resourcesByGoalId = new Map(
@@ -81,6 +87,11 @@ export const createConfiguredGoalPlanner = (
     byGoalId.set(resolvedSource.goalId, [...existing, resolvedSource]);
     return byGoalId;
   }, new Map<string, readonly ResolvedGoalMaterialSource[]>());
+  const materialItemsByGoalId = resolvedMaterialItems.reduce((byGoalId, resolvedItem) => {
+    const existing = byGoalId.get(resolvedItem.goalId) ?? [];
+    byGoalId.set(resolvedItem.goalId, [...existing, resolvedItem.item]);
+    return byGoalId;
+  }, new Map<string, readonly Item[]>());
 
   return (snapshot, state, previousOutcome) => {
     const activities: ActivityAssignment[] = [];
@@ -104,6 +115,7 @@ export const createConfiguredGoalPlanner = (
                     (materialSourcesByGoalId.get(goal.id) ?? []).map(
                       ({ materialSource }) => materialSource,
                     ),
+                    materialItemsByGoalId.get(goal.id) ?? [],
                   );
             })()
           : (() => {

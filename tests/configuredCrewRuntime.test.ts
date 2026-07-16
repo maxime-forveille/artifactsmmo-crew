@@ -5,7 +5,7 @@ import {
   createConfiguredCrewRuntime,
   resolveConfiguredItems,
   resolveConfiguredResources,
-  resolveEquipmentMaterialSources,
+  resolveEquipmentMaterials,
 } from "../src/bot/runtime/configuredCrewRuntime.js";
 import { ArtifactsApiError, type ArtifactsClient } from "../src/client/index.js";
 import type { components } from "../src/client/schema.js";
@@ -133,7 +133,7 @@ describe("resolveConfiguredItems", () => {
   });
 });
 
-describe("resolveEquipmentMaterialSources", () => {
+describe("resolveEquipmentMaterials", () => {
   const buildResolvedItem = (materialCodes: readonly string[]) => ({
     goalId: "equip-stan-dagger",
     item: {
@@ -148,62 +148,76 @@ describe("resolveEquipmentMaterialSources", () => {
   });
 
   it("resolves a direct material with one gather source", async () => {
+    const material = buildItem("copper_ore");
     const resource = buildResource("copper_rocks", "copper_ore");
+    const getItem = vi.fn(() => okAsync({ data: material }));
     const getMonsters = vi.fn(() => okAsync(buildPage([])));
     const getResources = vi.fn(() => okAsync(buildPage([resource])));
 
-    const result = await resolveEquipmentMaterialSources(
-      { getMonsters, getResources } as Pick<ArtifactsClient, "getMonsters" | "getResources">,
-      [buildResolvedItem(["copper_ore"])],
-    );
-
-    expect(result._unsafeUnwrap()).toEqual([
-      {
-        goalId: "equip-stan-dagger",
-        materialSource: {
-          itemCode: "copper_ore",
-          source: { resource, type: "gather" },
-        },
-      },
+    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
+      buildResolvedItem(["copper_ore"]),
     ]);
+
+    expect(result._unsafeUnwrap()).toEqual({
+      items: [{ goalId: "equip-stan-dagger", item: material }],
+      sources: [
+        {
+          goalId: "equip-stan-dagger",
+          materialSource: {
+            itemCode: "copper_ore",
+            source: { resource, type: "gather" },
+          },
+        },
+      ],
+    });
     expect(getMonsters).toHaveBeenCalledWith({ drop: "copper_ore", size: 100 });
     expect(getResources).toHaveBeenCalledWith({ drop: "copper_ore", size: 100 });
   });
 
   it("resolves a direct material with one monster source", async () => {
+    const material = buildItem("yellow_slimeball");
     const monster = buildMonster("yellow_slime", "yellow_slimeball");
+    const getItem = vi.fn(() => okAsync({ data: material }));
     const getMonsters = vi.fn(() => okAsync(buildPage([monster])));
     const getResources = vi.fn(() => okAsync(buildPage([])));
 
-    const result = await resolveEquipmentMaterialSources(
-      { getMonsters, getResources } as Pick<ArtifactsClient, "getMonsters" | "getResources">,
-      [buildResolvedItem(["yellow_slimeball"])],
-    );
-
-    expect(result._unsafeUnwrap()).toEqual([
-      {
-        goalId: "equip-stan-dagger",
-        materialSource: {
-          itemCode: "yellow_slimeball",
-          source: { monster, type: "hunt" },
-        },
-      },
+    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
+      buildResolvedItem(["yellow_slimeball"]),
     ]);
+
+    expect(result._unsafeUnwrap()).toEqual({
+      items: [{ goalId: "equip-stan-dagger", item: material }],
+      sources: [
+        {
+          goalId: "equip-stan-dagger",
+          materialSource: {
+            itemCode: "yellow_slimeball",
+            source: { monster, type: "hunt" },
+          },
+        },
+      ],
+    });
   });
 
-  it("leaves a material unresolved when no catalog source exists", async () => {
+  it("leaves a material source unresolved when no catalog source exists", async () => {
+    const material = buildItem("unknown_material");
+    const getItem = vi.fn(() => okAsync({ data: material }));
     const getMonsters = vi.fn(() => okAsync(buildPage([])));
     const getResources = vi.fn(() => okAsync(buildPage([])));
 
-    const result = await resolveEquipmentMaterialSources(
-      { getMonsters, getResources } as Pick<ArtifactsClient, "getMonsters" | "getResources">,
-      [buildResolvedItem(["unknown_material"])],
-    );
+    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
+      buildResolvedItem(["unknown_material"]),
+    ]);
 
-    expect(result._unsafeUnwrap()).toEqual([]);
+    expect(result._unsafeUnwrap()).toEqual({
+      items: [{ goalId: "equip-stan-dagger", item: material }],
+      sources: [],
+    });
   });
 
   it("does not choose between gather and hunt when both can produce the material", async () => {
+    const material = buildItem("slime_residue");
+    const getItem = vi.fn(() => okAsync({ data: material }));
     const getMonsters = vi.fn(() =>
       okAsync(buildPage([buildMonster("yellow_slime", "slime_residue")])),
     );
@@ -211,36 +225,111 @@ describe("resolveEquipmentMaterialSources", () => {
       okAsync(buildPage([buildResource("slime_pool", "slime_residue")])),
     );
 
-    const result = await resolveEquipmentMaterialSources(
-      { getMonsters, getResources } as Pick<ArtifactsClient, "getMonsters" | "getResources">,
-      [buildResolvedItem(["slime_residue"])],
-    );
+    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
+      buildResolvedItem(["slime_residue"]),
+    ]);
 
-    expect(result._unsafeUnwrap()).toEqual([]);
+    expect(result._unsafeUnwrap()).toEqual({
+      items: [{ goalId: "equip-stan-dagger", item: material }],
+      sources: [],
+    });
   });
 
   it("queries a repeated direct material only once per Goal", async () => {
+    const getItem = vi.fn(() => okAsync({ data: buildItem("copper_ore") }));
     const getMonsters = vi.fn(() => okAsync(buildPage([])));
     const getResources = vi.fn(() => okAsync(buildPage([])));
 
-    await resolveEquipmentMaterialSources(
-      { getMonsters, getResources } as Pick<ArtifactsClient, "getMonsters" | "getResources">,
-      [buildResolvedItem(["copper_ore", "copper_ore"])],
-    );
+    await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
+      buildResolvedItem(["copper_ore", "copper_ore"]),
+    ]);
 
+    expect(getItem).toHaveBeenCalledOnce();
     expect(getMonsters).toHaveBeenCalledOnce();
     expect(getResources).toHaveBeenCalledOnce();
   });
 
+  it("recursively resolves craftable intermediates down to a raw source", async () => {
+    const copperOre = buildItem("copper_ore");
+    const copperBar = {
+      ...buildItem("copper_bar"),
+      craft: {
+        items: [{ code: "copper_ore", quantity: 3 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting" as const,
+      },
+    };
+    const resource = buildResource("copper_rocks", "copper_ore");
+    const getItem = vi.fn((code: string) =>
+      okAsync({ data: code === "copper_bar" ? copperBar : copperOre }),
+    );
+    const getMonsters = vi.fn(() => okAsync(buildPage([])));
+    const getResources = vi.fn(() => okAsync(buildPage([resource])));
+
+    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
+      buildResolvedItem(["copper_bar"]),
+    ]);
+
+    expect(result._unsafeUnwrap()).toEqual({
+      items: [
+        { goalId: "equip-stan-dagger", item: copperBar },
+        { goalId: "equip-stan-dagger", item: copperOre },
+      ],
+      sources: [
+        {
+          goalId: "equip-stan-dagger",
+          materialSource: {
+            itemCode: "copper_ore",
+            source: { resource, type: "gather" },
+          },
+        },
+      ],
+    });
+    expect(getMonsters).toHaveBeenCalledOnce();
+    expect(getResources).toHaveBeenCalledOnce();
+  });
+
+  it("stops descending when a material recipe points back to an ancestor", async () => {
+    const copperBar = {
+      ...buildItem("copper_bar"),
+      craft: {
+        items: [{ code: "copper_dagger", quantity: 1 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting" as const,
+      },
+    };
+    const getItem = vi.fn(() => okAsync({ data: copperBar }));
+    const getMonsters = vi.fn();
+    const getResources = vi.fn();
+
+    const result = await resolveEquipmentMaterials(
+      { getItem, getMonsters, getResources } as unknown as Pick<
+        ArtifactsClient,
+        "getItem" | "getMonsters" | "getResources"
+      >,
+      [buildResolvedItem(["copper_bar"])],
+    );
+
+    expect(result._unsafeUnwrap()).toEqual({
+      items: [{ goalId: "equip-stan-dagger", item: copperBar }],
+      sources: [],
+    });
+    expect(getItem).toHaveBeenCalledOnce();
+    expect(getMonsters).not.toHaveBeenCalled();
+    expect(getResources).not.toHaveBeenCalled();
+  });
+
   it("propagates a material catalog failure", async () => {
     const apiError = new ArtifactsApiError("unavailable", 503, {});
+    const getItem = vi.fn(() => okAsync({ data: buildItem("copper_ore") }));
     const getMonsters = vi.fn(() => errAsync(apiError));
     const getResources = vi.fn(() => okAsync(buildPage([])));
 
-    const result = await resolveEquipmentMaterialSources(
-      { getMonsters, getResources } as Pick<ArtifactsClient, "getMonsters" | "getResources">,
-      [buildResolvedItem(["copper_ore"])],
-    );
+    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
+      buildResolvedItem(["copper_ore"]),
+    ]);
 
     expect(result.isErr() && result.error).toBe(apiError);
   });

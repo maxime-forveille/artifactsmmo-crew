@@ -53,6 +53,12 @@ const buildItem = (overrides: Partial<Item> = {}): Item => ({
   ...overrides,
 });
 
+const buildRawItem = (code: string): Item => {
+  const item = buildItem({ code });
+  delete item.craft;
+  return item;
+};
+
 const buildMonster = (overrides: Partial<Monster> = {}): Monster => ({
   ...({} as Monster),
   attack_air: 0,
@@ -296,6 +302,372 @@ describe("planEquipmentProgression", () => {
       buildSnapshot({ characters: [character] }),
       buildState(),
       buildItem(),
+    );
+
+    expect(result._unsafeUnwrap().activities[0]?.activity).toEqual({
+      itemCode: "copper_dagger",
+      quantity: 1,
+      type: "craftItem",
+    });
+  });
+
+  it("withdraws raw inputs required by a craftable intermediate", () => {
+    const target = buildItem({
+      craft: {
+        items: [{ code: "copper_bar", quantity: 2 }],
+        level: 5,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperBar = buildItem({
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_ore", quantity: 3 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperOre = buildRawItem("copper_ore");
+
+    const result = planEquipmentProgression(
+      buildSnapshot({ bank: [{ code: "copper_ore", quantity: 10 }] }),
+      buildState(),
+      target,
+      undefined,
+      [],
+      [copperBar, copperOre],
+    );
+
+    expect(result._unsafeUnwrap().activities[0]?.activity).toEqual({
+      itemCode: "copper_ore",
+      quantity: 6,
+      type: "withdrawItem",
+    });
+  });
+
+  it("crafts an intermediate once its recursively required inputs are held", () => {
+    const target = buildItem({
+      craft: {
+        items: [{ code: "copper_bar", quantity: 2 }],
+        level: 5,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperBar = buildItem({
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_ore", quantity: 3 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperOre = buildRawItem("copper_ore");
+    const snapshot = buildSnapshot({
+      characters: [
+        buildCharacter({
+          inventory: [{ code: "copper_ore", quantity: 6, slot: 1 }],
+        }),
+      ],
+    });
+
+    const result = planEquipmentProgression(
+      snapshot,
+      buildState(),
+      target,
+      undefined,
+      [],
+      [copperBar, copperOre],
+    );
+
+    expect(result._unsafeUnwrap().activities[0]?.activity).toEqual({
+      itemCode: "copper_bar",
+      quantity: 2,
+      type: "craftItem",
+    });
+  });
+
+  it("accounts for held output and recipe yield when crafting an intermediate", () => {
+    const target = buildItem({
+      craft: {
+        items: [{ code: "copper_bar", quantity: 3 }],
+        level: 5,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperBar = buildItem({
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_ore", quantity: 3 }],
+        level: 1,
+        quantity: 2,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperOre = buildRawItem("copper_ore");
+    const snapshot = buildSnapshot({
+      characters: [
+        buildCharacter({
+          inventory: [
+            { code: "copper_bar", quantity: 1, slot: 1 },
+            { code: "copper_ore", quantity: 3, slot: 2 },
+          ],
+        }),
+      ],
+    });
+
+    const result = planEquipmentProgression(
+      snapshot,
+      buildState(),
+      target,
+      undefined,
+      [],
+      [copperBar, copperOre],
+    );
+
+    expect(result._unsafeUnwrap().activities[0]?.activity).toEqual({
+      itemCode: "copper_bar",
+      quantity: 1,
+      type: "craftItem",
+    });
+  });
+
+  it("crafts the equipment target once its intermediate is held", () => {
+    const target = buildItem({
+      craft: {
+        items: [{ code: "copper_bar", quantity: 2 }],
+        level: 5,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperBar = buildItem({
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_ore", quantity: 3 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const snapshot = buildSnapshot({
+      characters: [
+        buildCharacter({
+          inventory: [{ code: "copper_bar", quantity: 2, slot: 1 }],
+        }),
+      ],
+    });
+
+    const result = planEquipmentProgression(
+      snapshot,
+      buildState(),
+      target,
+      undefined,
+      [],
+      [copperBar],
+    );
+
+    expect(result._unsafeUnwrap().activities[0]?.activity).toEqual({
+      itemCode: "copper_dagger",
+      quantity: 1,
+      type: "craftItem",
+    });
+  });
+
+  it("acquires a recursively missing raw input for an intermediate", () => {
+    const target = buildItem({
+      craft: {
+        items: [{ code: "copper_bar", quantity: 2 }],
+        level: 5,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperBar = buildItem({
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_ore", quantity: 3 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperOre = buildRawItem("copper_ore");
+    const snapshot = buildSnapshot({
+      characters: [buildCharacter({ mining_level: 5 })],
+    });
+
+    const result = planEquipmentProgression(
+      snapshot,
+      buildState(),
+      target,
+      undefined,
+      [
+        {
+          itemCode: "copper_ore",
+          source: { resource: buildResource(), type: "gather" },
+        },
+      ],
+      [copperBar, copperOre],
+    );
+
+    expect(result._unsafeUnwrap().activities[0]?.activity).toEqual({
+      resourceCode: "copper_rocks",
+      type: "farmResource",
+    });
+  });
+
+  it("exposes an intermediate profession-level Blocker before acquiring inputs", () => {
+    const target = buildItem({
+      craft: {
+        items: [{ code: "copper_bar", quantity: 2 }],
+        level: 5,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperBar = buildItem({
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_ore", quantity: 3 }],
+        level: 6,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperOre = buildRawItem("copper_ore");
+
+    const result = planEquipmentProgression(
+      buildSnapshot(),
+      buildState(),
+      target,
+      undefined,
+      [
+        {
+          itemCode: "copper_ore",
+          source: { resource: buildResource(), type: "gather" },
+        },
+      ],
+      [copperBar, copperOre],
+    );
+
+    expect(result._unsafeUnwrap().activities[0]?.activity).toEqual({
+      itemCode: "copper_bar",
+      quantity: 2,
+      type: "craftItem",
+    });
+  });
+
+  it("waits when a recursively resolved raw source has no idle producer", () => {
+    const target = buildItem({
+      craft: {
+        items: [{ code: "copper_bar", quantity: 1 }],
+        level: 5,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperBar = buildItem({
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_ore", quantity: 3 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperOre = buildRawItem("copper_ore");
+    const reservation = buildReservation({ characterName: "Cartman" });
+    const state = buildState({ reservations: [reservation] });
+    const snapshot = buildSnapshot({
+      characters: [
+        buildCharacter({ mining_level: 0 }),
+        buildCharacter({ mining_level: 5, name: "Cartman" }),
+      ],
+    });
+
+    const result = planEquipmentProgression(
+      snapshot,
+      state,
+      target,
+      undefined,
+      [
+        {
+          itemCode: "copper_ore",
+          source: { resource: buildResource(), type: "gather" },
+        },
+      ],
+      [copperBar, copperOre],
+    );
+
+    expect(result._unsafeUnwrap()).toEqual({ activities: [], state });
+  });
+
+  it("propagates an invalid recursively resolved raw source", () => {
+    const target = buildItem({
+      craft: {
+        items: [{ code: "copper_bar", quantity: 1 }],
+        level: 5,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperBar = buildItem({
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_ore", quantity: 3 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperOre = buildRawItem("copper_ore");
+    const resource = buildResource({
+      drops: [{ code: "iron_ore", max_quantity: 1, min_quantity: 1, rate: 1 }],
+    });
+
+    const result = planEquipmentProgression(
+      buildSnapshot(),
+      buildState(),
+      target,
+      undefined,
+      [{ itemCode: "copper_ore", source: { resource, type: "gather" } }],
+      [copperBar, copperOre],
+    );
+
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(InvalidEquipmentMaterialSourceError);
+  });
+
+  it("stops a cyclic intermediate recipe instead of recursing forever", () => {
+    const target = buildItem({
+      craft: {
+        items: [{ code: "copper_bar", quantity: 1 }],
+        level: 5,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+    const copperBar = buildItem({
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_dagger", quantity: 1 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting",
+      },
+    });
+
+    const result = planEquipmentProgression(
+      buildSnapshot(),
+      buildState(),
+      target,
+      undefined,
+      [],
+      [copperBar],
     );
 
     expect(result._unsafeUnwrap().activities[0]?.activity).toEqual({

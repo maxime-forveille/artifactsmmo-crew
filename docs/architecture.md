@@ -98,12 +98,14 @@ reporting, and retry timing remain explicit inputs; the adapter does not invent
 bank thresholds or autonomous priorities.
 
 `runtime/configuredCrewRuntime.ts` resolves every configured resource and item
-against the static catalog before constructing that adapter. It also resolves a
-direct equipment material only when the catalogs expose exactly one gather or
-hunt source; absent and ambiguous sources remain unresolved instead of being
-chosen arbitrarily. The resulting Goal-to-target mappings feed one pure planner
-in global priority order. An unresolved configured target prevents startup
-rather than allowing a partial runtime configuration.
+against the static catalog before constructing that adapter. For equipment it
+walks the static recipe tree, resolves every intermediate item, and accepts a
+raw material source only when the catalogs expose exactly one gather or hunt
+source. Cyclic references stop descending; absent and ambiguous sources remain
+unresolved instead of being chosen arbitrarily. The resulting Goal-to-target
+mappings feed one pure planner in global priority order. An unresolved
+configured target prevents startup rather than allowing a partial runtime
+configuration.
 
 `runtime/taskSupervisor.ts` currently supervises long-running tasks with one
 `AbortController` per character. Its useful behavior should survive the
@@ -177,11 +179,12 @@ Goal, avoids work already reserved, excludes busy characters, and otherwise
 proposes one `farmResource` Activity for the strongest eligible gatherer.
 
 `orchestration/equipmentProgression.ts` advances an explicit character equipment
-Goal. It retrieves a banked target and direct recipe materials, assigns an
-eligible gatherer or safe hunter for a uniquely sourced raw material, crafts an
-absent craftable target, equips it once held, and completes when the expected
-slot contains it. Craftable intermediates and profession-level Blockers remain
-for later planner layers.
+Goal through one recursive recipe step at a time. It retrieves banked inputs,
+assigns an eligible gatherer or safe hunter for a uniquely sourced raw material,
+crafts intermediates in dependency order, crafts the target, equips it, and then
+completes the Goal. The target character currently performs every craft in the
+chain; profession-level Blockers remain for a later planner layer to turn into
+profession progression work.
 
 `orchestration/configuredGoalPlanner.ts` applies both transitions in global
 priority order. Proposals act as temporary Reservations during the same

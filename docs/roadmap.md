@@ -79,7 +79,9 @@ new orchestration Interface.
       steps, including direct recipe materials already in the bank.
 - [x] Acquire a missing direct raw material from one unambiguous gather or hunt
       source with an eligible crew member.
-- [ ] Expand equipment prerequisites through craftable material intermediates.
+- [x] Expand equipment prerequisites through craftable material intermediates.
+- [ ] Assign intermediate crafts across characters and return their outputs to
+      shared storage.
 
 ### 3. Rolling scheduler
 

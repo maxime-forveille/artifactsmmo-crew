@@ -191,10 +191,20 @@ describe("createConfiguredGoalPlanner", () => {
     const equipmentGoal = buildEquipmentGoal();
     const item = buildItem();
     item.craft = {
-      items: [{ code: "copper_ore", quantity: 2 }],
+      items: [{ code: "copper_bar", quantity: 2 }],
       level: 5,
       quantity: 1,
       skill: "weaponcrafting",
+    };
+    const copperBar = {
+      ...buildItem(),
+      code: "copper_bar",
+      craft: {
+        items: [{ code: "copper_ore", quantity: 3 }],
+        level: 1,
+        quantity: 1,
+        skill: "weaponcrafting" as const,
+      },
     };
     const planner = createConfiguredGoalPlanner(
       [{ goalId: equipmentGoal.id, item }],
@@ -208,6 +218,7 @@ describe("createConfiguredGoalPlanner", () => {
           },
         },
       ],
+      [{ goalId: equipmentGoal.id, item: copperBar }],
     );
     const snapshot = {
       ...buildSnapshot(),
