@@ -208,6 +208,12 @@ reason, and optional utility evidence. A selected `GoalProposal` is not an
 Activity and performs no game operation; it becomes a persistent Goal only when
 accepted into orchestrator state.
 
+`orchestration/goalProposalAcceptance.ts` performs that pure state transition.
+It appends autonomous proposals after active Goals, inserts prerequisite Goals
+immediately before their preserved parent, rejects missing parents, and treats
+an equivalent active Goal as an idempotent no-op. Existing Goal order and
+Reservations remain unchanged.
+
 Goal Rules represent strategic opportunity families such as
 `equipmentUpgrade`, `combatProgression`, `professionProgression`,
 `gatheringProgression`, `bankReplenishment`, and `bankSurplusProcessing`. Their

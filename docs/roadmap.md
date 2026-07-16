@@ -119,7 +119,7 @@ new orchestration Interface.
 - [ ] Keep safety, Reservations, resource protection, and prerequisites outside
       configurable strategy order.
 - [x] Add the first automatically generated finite progression Goal.
-- [ ] Preserve a blocked parent Goal while inserting its prerequisite Goal ahead
+- [x] Preserve a blocked parent Goal while inserting its prerequisite Goal ahead
       of it.
 
 ### 5. Configurable strategy
