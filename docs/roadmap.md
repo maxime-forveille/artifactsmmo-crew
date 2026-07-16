@@ -107,7 +107,9 @@ new orchestration Interface.
 
 - [x] Decide that Goals are finite milestones; do not add infinite Goals or
       manually selected Directives.
-- [ ] Add explicit cached `WorldKnowledge` as pure policy input.
+- [x] Define deterministic paginated `WorldKnowledge` loading for static items,
+      monsters, and resources.
+- [ ] Pass `WorldKnowledge` as explicit input to autonomous Goal Policy.
 - [ ] Define `GoalRule`, `GoalCandidate`, and `GoalProposal` plain-data types.
 - [ ] Implement `createGoalPolicy` with a `proposeGoals` façade.
 - [ ] Split policy into `discoverGoalCandidates`, `rankGoalCandidates`, and

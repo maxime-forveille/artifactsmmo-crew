@@ -232,9 +232,13 @@ prerequisite resumes its preserved parent Goal. Stable semantic IDs prevent the
 same Goal from being proposed twice and persistent Goals prevent policy from
 oscillating on every snapshot.
 
-`WorldKnowledge` provides cached items, monsters, resources, recipes, and later
-market observations as explicit policy input. Goal Rules remain pure and never
-fetch their own data.
+`orchestration/worldKnowledge.ts` reads every static item, monster, and resource
+catalog page into deterministic code-sorted collections. The underlying client
+caches those static page reads for the process lifetime. This loader is not yet
+called by the current explicit-Goal runtime; it becomes an explicit input when
+autonomous Goal Policy is wired, avoiding new startup GETs before the data is
+used. Recipes are embedded in items, and future market observations can extend
+this input without allowing Goal Rules to fetch their own data.
 
 `orchestration/crewSnapshot.ts` reads all characters and every bank page into a
 deterministic read-only value. The game has no atomic account-snapshot
