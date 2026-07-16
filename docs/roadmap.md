@@ -109,10 +109,10 @@ new orchestration Interface.
       manually selected Directives.
 - [x] Define deterministic paginated `WorldKnowledge` loading for static items,
       monsters, and resources.
-- [ ] Pass `WorldKnowledge` as explicit input to autonomous Goal Policy.
-- [ ] Define `GoalRule`, `GoalCandidate`, and `GoalProposal` plain-data types.
-- [ ] Implement `createGoalPolicy` with a `proposeGoals` façade.
-- [ ] Split policy into `discoverGoalCandidates`, `rankGoalCandidates`, and
+- [x] Pass `WorldKnowledge` as explicit input to autonomous Goal Policy.
+- [x] Define `GoalRule`, `GoalCandidate`, and `GoalProposal` plain-data types.
+- [x] Implement `createGoalPolicy` with a `proposeGoals` façade.
+- [x] Split policy into `discoverGoalCandidates`, `rankGoalCandidates`, and
       `selectCompatibleGoals`.
 - [ ] Give generated Goals stable semantic IDs and prevent equivalent active
       Goals from being proposed twice.
@@ -161,7 +161,7 @@ new orchestration Interface.
 
 - [x] Support several simultaneous bank targets with explicit priority.
 - [x] Account for in-flight production before assigning duplicate work.
-- [ ] Rank Goal Candidates first by configured Goal Rule order, then by utility
+- [x] Rank Goal Candidates first by configured Goal Rule order, then by utility
       and a deterministic tie-breaker.
 - [ ] Compare hunting and gathering with observed XP/time data.
 - [ ] Choose profession XP recipes from observed efficiency rather than only
