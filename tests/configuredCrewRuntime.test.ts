@@ -1,4 +1,4 @@
-import { errAsync, okAsync } from 'neverthrow';
+import { err, errAsync, ok, okAsync } from 'neverthrow';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -12,6 +12,7 @@ import {
   type ArtifactsClient,
 } from '../src/client/index.js';
 import type { components } from '../src/client/schema.js';
+import { createInMemoryOrchestratorStateRepository } from '../src/persistence/inMemoryOrchestratorStateRepository.js';
 import type { OrchestrationConfig } from '../src/utils/orchestrationConfig.js';
 
 type BankPage = components['schemas']['DataPage_SimpleItemSchema_'];
@@ -19,6 +20,8 @@ type Character = components['schemas']['CharacterSchema'];
 type Item = components['schemas']['ItemSchema'];
 type Monster = components['schemas']['MonsterSchema'];
 type Resource = components['schemas']['ResourceSchema'];
+
+class TestRepositoryError extends Error {}
 
 const buildCharacter = (): Character => ({
   ...({} as Character),
@@ -395,7 +398,7 @@ describe('resolveConfiguredResources', () => {
 });
 
 describe('createConfiguredCrewRuntime', () => {
-  it('completes an already-equipped configured Goal without starting an Action', async () => {
+  it('restores and completes an already-satisfied durable Goal without starting an Action', async () => {
     const getBankItems = vi.fn(() =>
       okAsync({ ...buildBankPage(), data: [], total: 0 }),
     );
@@ -406,19 +409,44 @@ describe('createConfiguredCrewRuntime', () => {
       getItem,
       getMyCharacters,
     } as unknown as ArtifactsClient;
+    const stateRepository = createInMemoryOrchestratorStateRepository({
+      goals: [
+        {
+          characterName: 'Stan',
+          id: 'equip-stan-dagger',
+          itemCode: 'copper_dagger',
+          origin: 'configured',
+          type: 'equipItem',
+        },
+      ],
+    });
 
     const result = await createConfiguredCrewRuntime(client, {
-      config: buildEquipmentConfig(),
+      config: { goals: [] },
       reportError: vi.fn(),
+      stateRepository,
       waitBeforeRetry: vi.fn(async () => undefined),
     });
     const runtime = result._unsafeUnwrap();
 
+    expect(runtime.getState()).toEqual({
+      goals: [
+        {
+          characterName: 'Stan',
+          id: 'equip-stan-dagger',
+          itemCode: 'copper_dagger',
+          origin: 'configured',
+          type: 'equipItem',
+        },
+      ],
+      reservations: [],
+    });
     expect(runtime.start().isOk()).toBe(true);
     expect(runtime.getState()).toEqual({ goals: [], reservations: [] });
     expect(getItem).toHaveBeenCalledWith('copper_dagger');
     expect(getMyCharacters).toHaveBeenCalledOnce();
     expect(getBankItems).toHaveBeenCalledOnce();
+    expect(stateRepository.load()._unsafeUnwrap()).toEqual({ goals: [] });
   });
 
   it('builds a runtime from resolved resources and validated Goals', async () => {
@@ -438,6 +466,7 @@ describe('createConfiguredCrewRuntime', () => {
     const result = await createConfiguredCrewRuntime(client, {
       config: buildConfig(),
       reportError,
+      stateRepository: createInMemoryOrchestratorStateRepository(),
       waitBeforeRetry,
     });
     const runtime = result._unsafeUnwrap();
@@ -450,5 +479,117 @@ describe('createConfiguredCrewRuntime', () => {
     expect(getBankItems).toHaveBeenCalledTimes(1);
     expect(reportError).not.toHaveBeenCalled();
     expect(waitBeforeRetry).not.toHaveBeenCalled();
+  });
+
+  it('restores an explicitly persisted empty state without resolving fallback Goals', async () => {
+    const getBankItems = vi.fn(() => okAsync(buildBankPage()));
+    const getItem = vi.fn();
+    const getMyCharacters = vi.fn(() => okAsync({ data: [buildCharacter()] }));
+    const getResource = vi.fn();
+    const stateRepository = createInMemoryOrchestratorStateRepository({
+      goals: [],
+    });
+
+    const result = await createConfiguredCrewRuntime(
+      {
+        getBankItems,
+        getItem,
+        getMyCharacters,
+        getResource,
+      } as unknown as ArtifactsClient,
+      {
+        config: {
+          goals: [...buildConfig().goals, ...buildEquipmentConfig().goals],
+        },
+        reportError: vi.fn(),
+        stateRepository,
+        waitBeforeRetry: vi.fn(async () => undefined),
+      },
+    );
+    const runtime = result._unsafeUnwrap();
+
+    expect(runtime.getState()).toEqual({ goals: [], reservations: [] });
+    expect(runtime.start().isOk()).toBe(true);
+    expect(stateRepository.load()._unsafeUnwrap()).toEqual({ goals: [] });
+    expect(getItem).not.toHaveBeenCalled();
+    expect(getResource).not.toHaveBeenCalled();
+  });
+
+  it('returns a repository load failure before reading the Artifacts API', async () => {
+    const repositoryError = new TestRepositoryError('load failed');
+    const getBankItems = vi.fn();
+    const getItem = vi.fn();
+    const getMyCharacters = vi.fn();
+
+    const result = await createConfiguredCrewRuntime(
+      { getBankItems, getItem, getMyCharacters } as unknown as ArtifactsClient,
+      {
+        config: buildEquipmentConfig(),
+        reportError: vi.fn(),
+        stateRepository: {
+          load: () => err(repositoryError),
+          save: () => ok(undefined),
+        },
+        waitBeforeRetry: vi.fn(async () => undefined),
+      },
+    );
+
+    expect(result.isErr() && result.error).toBe(repositoryError);
+    expect(getBankItems).not.toHaveBeenCalled();
+    expect(getItem).not.toHaveBeenCalled();
+    expect(getMyCharacters).not.toHaveBeenCalled();
+  });
+
+  it('does not start planned work when durable state cannot be saved', async () => {
+    const repositoryError = new TestRepositoryError('save failed');
+    const save = vi.fn(() => err(repositoryError));
+    const getBankItems = vi.fn(() =>
+      okAsync({ ...buildBankPage(), data: [], total: 0 }),
+    );
+    const getItem = vi.fn((code: string) => okAsync({ data: buildItem(code) }));
+    const equip = vi.fn();
+    const getMyCharacters = vi.fn(() =>
+      okAsync({
+        data: [
+          {
+            ...buildCharacter(),
+            inventory: [{ code: 'copper_dagger', quantity: 1 }],
+            weapon_slot: '',
+          },
+        ],
+      }),
+    );
+
+    const result = await createConfiguredCrewRuntime(
+      {
+        equip,
+        getBankItems,
+        getItem,
+        getMyCharacters,
+      } as unknown as ArtifactsClient,
+      {
+        config: buildEquipmentConfig(),
+        reportError: vi.fn(),
+        stateRepository: { load: () => ok(undefined), save },
+        waitBeforeRetry: vi.fn(async () => undefined),
+      },
+    );
+    const runtime = result._unsafeUnwrap();
+    const started = runtime.start();
+
+    expect(started.isErr() && started.error).toBe(repositoryError);
+    expect(save).toHaveBeenCalledWith({
+      goals: [
+        {
+          characterName: 'Stan',
+          id: 'equip-stan-dagger',
+          itemCode: 'copper_dagger',
+          origin: 'configured',
+          type: 'equipItem',
+        },
+      ],
+    });
+    expect(equip).not.toHaveBeenCalled();
+    expect(runtime.getState().goals).toHaveLength(1);
   });
 });

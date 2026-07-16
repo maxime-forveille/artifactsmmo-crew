@@ -62,6 +62,33 @@ Autonomous Goal generation and optional one-shot overrides remain future steps.
 Safety, Reservation, prerequisite, and resource-exclusivity invariants remain
 non-configurable.
 
+### Durable configured Goals
+
+Configured orchestration stores active Goals in the ignored local database:
+
+```text
+artifactsmmo-crew.sqlite
+```
+
+Each startup applies forward-only migrations, restores durable Goals, discards
+all process-local Reservations, and observes fresh character and bank state from
+the Artifacts API. A Goal already satisfied by that observation is completed and
+the resulting state is saved before any newly planned Activity starts.
+
+`tsx watch` restarts therefore retain Goals but never assume that interrupted
+work is still running. An Action sent before shutdown may still have completed
+on the server; the fresh Crew Snapshot is responsible for reconciliation.
+
+To intentionally reset durable orchestration intent:
+
+1. stop Artifacts MMO Crew;
+2. optionally back up `artifactsmmo-crew.sqlite` for diagnosis;
+3. delete `artifactsmmo-crew.sqlite` and any matching `-shm` or `-wal` files;
+4. restart the process.
+
+The schema is recreated and explicit Goals from `orchestration.json` are used as
+the initial fallback. Never delete the database while the process is running.
+
 ## Validation commands
 
 Use repository scripts rather than invoking tool binaries directly:

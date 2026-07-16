@@ -1,4 +1,4 @@
-import { okAsync, ResultAsync } from 'neverthrow';
+import { errAsync, okAsync, ResultAsync } from 'neverthrow';
 
 import {
   type ArtifactsApiError,
@@ -16,6 +16,12 @@ import {
   type ResolvedGoalMaterialSource,
   type ResolvedGoalResource,
 } from '../orchestration/configuredGoalPlanner.js';
+import type { ActiveGoal } from '../orchestration/orchestratorState.js';
+import {
+  durableStateFrom,
+  type OrchestratorStateRepository,
+  restoreOrchestratorState,
+} from '../orchestration/orchestratorStateRepository.js';
 
 import {
   createCrewRuntime,
@@ -23,18 +29,19 @@ import {
 } from './crewRuntime.js';
 import type { RollingActivityCoordinator } from './rollingActivityCoordinator.js';
 
-type ConfiguredCrewRuntimeOptions = Readonly<{
+type ConfiguredCrewRuntimeOptions<ERepository extends Error> = Readonly<{
   config: OrchestrationConfig;
   reportError: (error: unknown) => void;
+  stateRepository: OrchestratorStateRepository<ERepository>;
   waitBeforeRetry: () => Promise<void>;
 }>;
 
-export const resolveConfiguredItems = (
+const resolveGoalItems = (
   client: Pick<ArtifactsClient, 'getItem'>,
-  config: OrchestrationConfig,
+  goals: readonly ActiveGoal[],
 ): ResultAsync<readonly ResolvedGoalItem[], ArtifactsApiError> =>
   ResultAsync.combine(
-    config.goals.flatMap((goal) =>
+    goals.flatMap((goal) =>
       goal.type === 'equipItem'
         ? [
             client
@@ -44,6 +51,12 @@ export const resolveConfiguredItems = (
         : [],
     ),
   );
+
+export const resolveConfiguredItems = (
+  client: Pick<ArtifactsClient, 'getItem'>,
+  config: OrchestrationConfig,
+): ResultAsync<readonly ResolvedGoalItem[], ArtifactsApiError> =>
+  resolveGoalItems(client, buildInitialOrchestratorState(config).goals);
 
 type MaterialResolutionClient = Pick<
   ArtifactsClient,
@@ -198,28 +211,58 @@ export const resolveConfiguredResources = (
   );
 
 /** Resolves configured catalog targets before creating the live crew runtime. */
-export const createConfiguredCrewRuntime = (
+export const createConfiguredCrewRuntime = <ERepository extends Error>(
   client: ArtifactsClient,
-  options: ConfiguredCrewRuntimeOptions,
+  options: ConfiguredCrewRuntimeOptions<ERepository>,
 ): ResultAsync<
-  RollingActivityCoordinator<ConfiguredGoalPlannerError, CrewRuntimeStartError>,
-  ArtifactsApiError
-> =>
-  resolveConfiguredItems(client, options.config).andThen((resolvedItems) =>
+  RollingActivityCoordinator<
+    ConfiguredGoalPlannerError | ERepository,
+    CrewRuntimeStartError,
+    ArtifactsApiError
+  >,
+  ArtifactsApiError | ERepository
+> => {
+  const loadedState = options.stateRepository.load();
+  if (loadedState.isErr()) {
+    return errAsync(loadedState.error);
+  }
+
+  const fallbackState = buildInitialOrchestratorState(options.config);
+  const initialState = restoreOrchestratorState(
+    loadedState.value,
+    fallbackState.goals,
+  );
+
+  const activeGoalIds = new Set(initialState.goals.map((goal) => goal.id));
+  const activeConfig = {
+    ...options.config,
+    goals: options.config.goals.filter((goal) => activeGoalIds.has(goal.id)),
+  };
+
+  return resolveGoalItems(client, initialState.goals).andThen((resolvedItems) =>
     ResultAsync.combine([
-      resolveConfiguredResources(client, options.config),
+      resolveConfiguredResources(client, activeConfig),
       resolveEquipmentMaterials(client, resolvedItems),
-    ]).andThen(([resolvedResources, resolvedMaterials]) =>
-      createCrewRuntime(client, {
-        initialState: buildInitialOrchestratorState(options.config),
-        plan: createConfiguredGoalPlanner(
-          resolvedItems,
-          resolvedResources,
-          resolvedMaterials.sources,
-          resolvedMaterials.items,
-        ),
+    ]).andThen(([resolvedResources, resolvedMaterials]) => {
+      const planConfiguredGoals = createConfiguredGoalPlanner(
+        resolvedItems,
+        resolvedResources,
+        resolvedMaterials.sources,
+        resolvedMaterials.items,
+      );
+
+      return createCrewRuntime(client, {
+        initialState,
+        plan: (snapshot, state, previousOutcome) =>
+          planConfiguredGoals(snapshot, state, previousOutcome).andThen(
+            (plan) =>
+              options.stateRepository
+                .save(durableStateFrom(plan.state))
+                .map(() => plan),
+          ),
         reportError: options.reportError,
         waitBeforeRetry: options.waitBeforeRetry,
-      }),
-    ),
+      });
+    }),
   );
+};

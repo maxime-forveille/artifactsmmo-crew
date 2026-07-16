@@ -29,6 +29,7 @@ type ActivityLauncherDependencies<E extends Error> = Readonly<{
 }>;
 
 export type LaunchedActivity<E extends Error> = Readonly<{
+  assignment: ActivityAssignment<ExecutableActivity>;
   completion: Promise<ActivityRunOutcome<E>>;
   state: OrchestratorState;
 }>;
@@ -81,6 +82,7 @@ export const launchActivity = <E extends Error>(
   signal?: AbortSignal,
 ): Result<LaunchedActivity<E>, StartActivityError> =>
   reserveStartedActivity(state, assignment).map((reservedState) => ({
+    assignment,
     completion: runUntilTerminal(assignment, dependencies, signal),
     state: reservedState,
   }));

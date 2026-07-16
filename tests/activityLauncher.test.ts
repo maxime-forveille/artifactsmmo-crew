@@ -64,6 +64,7 @@ describe('launchActivity', () => {
 
     expect(result.isOk()).toBe(true);
     const launched = result._unsafeUnwrap();
+    expect(launched.assignment).toBe(assignment);
     expect(launched.state).toEqual({
       goals: state.goals,
       reservations: [assignment],

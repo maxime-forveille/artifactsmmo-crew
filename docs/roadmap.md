@@ -182,20 +182,21 @@ source of game truth or a place where strategy is implemented.
       `parentGoalId`, origin, originating Goal Rule, and decision reason.
 - [x] Define an `OrchestratorStateRepository` Port and an isolated in-memory
       Adapter.
-- [ ] Implement the SQLite `OrchestratorStateRepository` Adapter.
-- [ ] Add a versioned SQLite schema and forward-only migrations.
-- [ ] Persist Goal acceptance, completion, ordering, and prerequisite metadata
-      transactionally.
-- [ ] Load durable Goals after restart, then reconcile them against a fresh Crew
+- [x] Implement the SQLite `OrchestratorStateRepository` Adapter.
+- [x] Add a versioned SQLite schema and forward-only migrations.
+- [x] Persist Goal acceptance, completion, ordering, and prerequisite metadata
+      transactionally before newly planned Activities start.
+- [x] Load durable Goals after restart, then reconcile them against a fresh Crew
       Snapshot before planning new work.
-- [ ] Restart with no active Reservations: runtime promises disappeared and must
+- [x] Restart with no active Reservations: runtime promises disappeared and must
       never be reconstructed as running work.
-- [ ] Complete Goals already satisfied by observed API state before proposing
+- [x] Complete Goals already satisfied by observed API state before proposing
       replacements.
-- [ ] Preserve one-shot overrides and blocked parent Goals across restarts.
-- [ ] Keep Character state, inventory, equipment, cooldowns, and bank contents
+- [ ] Preserve one-shot overrides and blocked parent Goals across restarts in the
+      live runtime, including Goal-independent catalog resolution.
+- [x] Keep Character state, inventory, equipment, cooldowns, and bank contents
       authoritative in the Artifacts API rather than duplicated local state.
-- [ ] Add restart and migration tests using isolated temporary databases.
+- [x] Add restart and migration tests using isolated temporary databases.
 
 ### Persistent cache
 

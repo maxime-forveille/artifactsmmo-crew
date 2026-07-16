@@ -68,6 +68,7 @@ src/
     runtime/          Character execution and supervision
     tasks/            Transitional forever-task implementation
   client/             Typed Result-based Artifacts API client
+  persistence/        In-memory and SQLite persistence Adapters
   utils/              Configuration, logging, cooldowns, JSON adapter
 ```
 
@@ -140,6 +141,13 @@ The current runtime validates this policy but still executes only explicit
 Goals. Autonomous Goal generation and optional finite one-shot overrides are
 later migration steps.
 
+Configured orchestration persists active Goals in the ignored local file
+`artifactsmmo-crew.sqlite`. On restart it restores those Goals with no active
+Reservations, observes a fresh Crew Snapshot, and records any reconciled state
+before launching more Activities. Delete the database only when intentionally
+resetting durable orchestration intent; the next start recreates its schema and
+falls back to the Goals in `orchestration.json`.
+
 Rule order is configurable strategy. Safety, Reservations, prerequisite
 resolution, bank protection, and one-Activity-per-character constraints remain
 non-configurable invariants. Reordering rules changes priorities without a code
@@ -206,6 +214,8 @@ directly.
 - Static catalogs are cached for the process lifetime.
 - Bank data and character logs use short-lived caches.
 - Local rate-limit history is lost on restart; the server window is not.
+- Configured Goals survive restarts in `artifactsmmo-crew.sqlite`; Reservations
+  do not.
 - Farming and hunting recover from full inventories by banking.
 - Combat selection and material-acquisition fights use the shared safety model.
 

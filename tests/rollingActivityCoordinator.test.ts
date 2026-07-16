@@ -28,6 +28,7 @@ import type { ActivityPlan } from '../src/bot/runtime/activityScheduler.js';
 import {
   createRollingActivityCoordinator,
   type RollingActivityPlanner,
+  UnexpectedCoordinatorError,
 } from '../src/bot/runtime/rollingActivityCoordinator.js';
 
 class TestActivityError extends Error {}
@@ -107,7 +108,11 @@ const createStarter = () => {
           createDeferred<ActivityRunOutcome<TestActivityError>>();
         completions.set(assignment.characterName, completion);
 
-        return { completion: completion.promise, state: reservedState };
+        return {
+          assignment,
+          completion: completion.promise,
+          state: reservedState,
+        };
       }),
   );
 
@@ -181,8 +186,9 @@ describe('createRollingActivityCoordinator', () => {
 
     const outcome = completedOutcome('Stan', 'goal-copper');
     completions.get('Stan')?.resolve(outcome);
-    await coordinator.waitForIdle();
+    const idle = await coordinator.waitForIdle();
 
+    expect(idle.isOk()).toBe(true);
     expect(plan).toHaveBeenCalledTimes(2);
     expect(plan).toHaveBeenNthCalledWith(
       2,
@@ -305,8 +311,9 @@ describe('createRollingActivityCoordinator', () => {
     coordinator.start();
 
     completions.get('Stan')?.resolve(completedOutcome('Stan', 'goal-copper'));
-    await coordinator.waitForIdle();
+    const idle = await coordinator.waitForIdle();
 
+    expect(idle.isErr() && idle.error).toBe(refreshError);
     expect(reportError).toHaveBeenCalledWith(refreshError);
     expect(plan).toHaveBeenCalledTimes(1);
     expect(coordinator.getState().reservations).toEqual([]);
@@ -445,7 +452,7 @@ describe('createRollingActivityCoordinator', () => {
     expect(isIdle).toBe(true);
   });
 
-  it('reports a planning failure after processing a terminal outcome', async () => {
+  it('reports and returns a planning failure after processing a terminal outcome', async () => {
     const assignment = buildAssignment('Stan', 'goal-copper');
     const planError = new TestPlanError('replanning failed');
     const reportError = vi.fn();
@@ -473,8 +480,9 @@ describe('createRollingActivityCoordinator', () => {
     coordinator.start();
 
     completions.get('Stan')?.resolve(completedOutcome('Stan', 'goal-copper'));
-    await coordinator.waitForIdle();
+    const idle = await coordinator.waitForIdle();
 
+    expect(idle.isErr() && idle.error).toBe(planError);
     expect(reportError).toHaveBeenCalledWith(planError);
     expect(coordinator.getState().reservations).toEqual([]);
   });
@@ -500,10 +508,79 @@ describe('createRollingActivityCoordinator', () => {
     coordinator.start();
 
     completions.get('Stan')?.resolve(completedOutcome('Stan', 'goal-copper'));
-    await coordinator.waitForIdle();
+    const idle = await coordinator.waitForIdle();
 
+    expect(idle.isErr()).toBe(true);
+    expect(idle._unsafeUnwrapErr()).toMatchObject({
+      cause: refreshError,
+      message: 'Unexpected rolling coordinator failure',
+      name: 'UnexpectedCoordinatorError',
+    });
+    expect(idle._unsafeUnwrapErr()).toBeInstanceOf(UnexpectedCoordinatorError);
     expect(reportError).toHaveBeenCalledWith(refreshError);
     expect(coordinator.getState().reservations).toEqual([]);
+  });
+
+  it('reports a rejected Activity completion and releases its Reservation', async () => {
+    const assignment = buildAssignment('Stan', 'goal-copper');
+    const completionError = new Error('Activity completion crashed');
+    const reportError = vi.fn();
+    const startActivity = vi.fn(
+      (
+        state: OrchestratorState,
+        currentAssignment: ActivityAssignment<ExecutableActivity>,
+      ): Result<LaunchedActivity<TestActivityError>, StartActivityError> =>
+        reserveStartedActivity(state, currentAssignment).map(
+          (reservedState) => ({
+            assignment: currentAssignment,
+            completion: Promise.reject(completionError),
+            state: reservedState,
+          }),
+        ),
+    );
+    const coordinator = createRollingActivityCoordinator(
+      buildState(),
+      buildSnapshot('2026-07-15T12:00:00.000Z'),
+      {
+        ...noSnapshotRetry,
+        plan: (_snapshot, state) => ok({ activities: [assignment], state }),
+        refreshSnapshot: () =>
+          okAsync(buildSnapshot('2026-07-15T12:01:00.000Z')),
+        reportError,
+        startActivity,
+      },
+    );
+
+    expect(coordinator.start().isOk()).toBe(true);
+    const idle = await coordinator.waitForIdle();
+
+    expect(idle.isErr()).toBe(true);
+    expect(idle._unsafeUnwrapErr()).toMatchObject({
+      cause: completionError,
+      name: 'UnexpectedCoordinatorError',
+    });
+    expect(reportError).toHaveBeenCalledWith(completionError);
+    expect(coordinator.getState().reservations).toEqual([]);
+  });
+
+  it('returns a successful idle result when no work is planned', async () => {
+    const { startActivity } = createStarter();
+    const coordinator = createRollingActivityCoordinator(
+      buildState(),
+      buildSnapshot('2026-07-15T12:00:00.000Z'),
+      {
+        ...noSnapshotRetry,
+        plan: (_snapshot, state) => ok({ activities: [], state }),
+        refreshSnapshot: () =>
+          okAsync(buildSnapshot('2026-07-15T12:01:00.000Z')),
+        reportError: vi.fn(),
+        startActivity,
+      },
+    );
+
+    expect(coordinator.start().isOk()).toBe(true);
+    expect((await coordinator.waitForIdle()).isOk()).toBe(true);
+    expect(startActivity).not.toHaveBeenCalled();
   });
 
   it('returns an initial planning failure without starting work', async () => {
@@ -523,9 +600,10 @@ describe('createRollingActivityCoordinator', () => {
     );
 
     const result = coordinator.start();
-    await coordinator.waitForIdle();
+    const idle = await coordinator.waitForIdle();
 
     expect(result.isErr() && result.error).toBe(planError);
+    expect(idle.isErr() && idle.error).toBe(planError);
     expect(startActivity).not.toHaveBeenCalled();
   });
 });

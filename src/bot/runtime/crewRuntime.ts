@@ -89,7 +89,7 @@ export const createCrewRuntime = <EPlan extends Error>(
   client: ArtifactsClient,
   options: CrewRuntimeOptions<EPlan>,
 ): ResultAsync<
-  RollingActivityCoordinator<EPlan, CrewRuntimeStartError>,
+  RollingActivityCoordinator<EPlan, CrewRuntimeStartError, ArtifactsApiError>,
   ArtifactsApiError
 > =>
   readCrewSnapshot(client).map((initialSnapshot) => {

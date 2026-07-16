@@ -104,7 +104,9 @@ re-enters policy with its Blocker details before the next queued outcome is
 handled. Snapshot failures classified as retryable wait and retry inside the
 same event, so policy never runs on stale observation. Expected and unexpected
 asynchronous failures are reported without leaving stale Reservations in
-runtime state.
+runtime state. Terminal processing, snapshot, planning, and Activity-start
+failures are also returned by `waitForIdle`, so the entrypoint cannot mistake a
+stopped scheduler for satisfied Goals.
 
 `runtime/crewRuntime.ts` is the concrete Artifacts adapter. It reads the initial
 snapshot, seeds Character Agents, dispatches bounded Activities, classifies
@@ -112,15 +114,24 @@ transport/server failures for retry, and refreshes observations. Goals, policy,
 reporting, and retry timing remain explicit inputs; the adapter does not invent
 bank thresholds or autonomous priorities.
 
-`runtime/configuredCrewRuntime.ts` resolves every configured resource and item
-against the static catalog before constructing that adapter. For equipment it
-walks the static recipe tree, resolves every intermediate item, and accepts a
-raw material source only when the catalogs expose exactly one resource or
-monster source. Cyclic references stop descending; absent and ambiguous sources
-remain unresolved instead of being chosen arbitrarily. The resulting
-Goal-to-target mappings feed one pure planner in global priority order. An
-unresolved configured target prevents startup rather than allowing a partial
-runtime configuration.
+`runtime/configuredCrewRuntime.ts` first restores durable Goals from the
+`OrchestratorStateRepository`. Configured Goals are used only when the Repository
+has never saved state; an explicitly saved empty state remains empty. Every
+restart clears Reservations before the runtime observes a fresh Crew Snapshot.
+
+The Adapter then resolves every configured resource and item against the static
+catalog before constructing the crew runtime. For equipment it walks the static
+recipe tree, resolves every intermediate item, and accepts a raw material source
+only when the catalogs expose exactly one resource or monster source. Cyclic
+references stop descending; absent and ambiguous sources remain unresolved
+instead of being chosen arbitrarily. The resulting Goal-to-target mappings feed
+one pure planner in global priority order. An unresolved configured target
+prevents startup rather than allowing a partial runtime configuration.
+
+Every successful planning transition is reduced to durable state and saved
+before the scheduler launches newly proposed Activities. A Repository save
+failure therefore prevents new Actions from starting. Completion of a Goal that
+a fresh snapshot already satisfies is persisted through the same boundary.
 
 `runtime/taskSupervisor.ts` currently supervises long-running tasks with one
 `AbortController` per character. Its useful behavior should survive the
@@ -394,16 +405,30 @@ orchestration the default and removing this fallback.
 
 ## Persistence
 
-SQLite will be introduced before autonomous orchestration becomes the default.
+SQLite is being introduced before autonomous orchestration becomes the default.
 The `OrchestratorStateRepository` Port lives in `bot/orchestration/`; its
 in-memory and SQLite Adapters live in top-level `persistence/`. The in-memory
-Adapter already establishes copy isolation and restart-safe state boundaries.
-The SQLite Adapter will persist active Goals, ordering, origin, and prerequisite
-relationships without changing pure Goal Policy or Activity planning
-Interfaces. Startup loads durable Goals, clears ephemeral
-Reservations, observes a fresh Crew Snapshot, and reconciles already-satisfied
-Goals before replanning. Character and bank state remain authoritative in the
-Artifacts API.
+Adapter establishes copy isolation and restart-safe state boundaries. The
+built-in `node:sqlite` connection Adapter enables foreign-key enforcement, and
+forward-only transactional migrations own the versioned schema. The SQLite
+Repository Adapter replaces and loads active Goals transactionally, preserving
+ordering, origin, and prerequisite relationships without changing pure Goal
+Policy or Activity planning Interfaces. Persisted JSON is validated with Valibot
+and checked against its indexed metadata before entering orchestration.
+
+Configured orchestration opens `artifactsmmo-crew.sqlite`, applies migrations,
+loads durable Goals, clears ephemeral Reservations, observes a fresh Crew
+Snapshot, and reconciles already-satisfied Goals before replanning. Planner state
+is persisted before newly selected Activities launch. The database is closed
+when the runtime becomes idle or startup fails. Character and bank state remain
+authoritative in the Artifacts API.
+
+Equipment targets are resolved directly from restored Goals. Resource mappings
+for `replenishBankItem` are still keyed by explicit Goal IDs from
+`orchestration.json`. The SQLite Adapter can preserve autonomous, prerequisite,
+and override Goals, but the configured live runtime cannot safely resume every
+arbitrary persisted Goal until planning consumes Goal-independent
+`WorldKnowledge` instead of configuration-specific mappings.
 
 A separate cache Adapter may share the database after durable state is proven.
 It will persist static world knowledge, rate-limit windows, and observations
