@@ -1,6 +1,6 @@
-# Roadmap
+# Artifacts MMO Crew Roadmap
 
-This roadmap tracks bot capabilities, not the current runtime assignments in
+This roadmap tracks Artifacts MMO Crew capabilities, not the current runtime assignments in
 `tasks.json`. Git history remains the detailed record of delivered changes and
 live incidents.
 
@@ -16,7 +16,7 @@ manually selected Directives.
 Strategic Goal Rule order will be configurable in `orchestration.json`; safety
 and correctness invariants remain fixed in code.
 
-The migration must keep the current bot usable at every step. Transitional
+The migration must keep Artifacts MMO Crew usable at every step. Transitional
 tasks remain until their policy and execution behavior have moved behind the
 new orchestration Interface.
 

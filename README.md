@@ -1,9 +1,9 @@
 # Artifacts MMO Crew
 
-Personal TypeScript bot for coordinating a five-character crew in
+Personal TypeScript crew orchestrator for coordinating five characters in
 [Artifacts MMO](https://artifactsmmo.com/).
 
-The bot currently runs gathering, hunting, crafting, equipment, and banking
+Artifacts MMO Crew currently runs gathering, hunting, crafting, equipment, and banking
 workflows against the live API. It is being migrated from long-running
 per-character `autoXXX` tasks toward a crew orchestrator that observes shared
 state and schedules bounded Activities.
@@ -43,8 +43,8 @@ Start the development process:
 pnpm dev
 ```
 
-Do not run multiple bot processes for the same account. Artifacts rate limits
-are shared across characters and processes.
+Do not run multiple instances of Artifacts MMO Crew for the same account.
+Artifacts rate limits are shared across characters and processes.
 
 ## Documentation
 

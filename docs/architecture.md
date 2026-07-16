@@ -1,6 +1,6 @@
-# Architecture
+# Artifacts MMO Crew Architecture
 
-The bot is moving from long-running per-character `autoXXX` tasks toward a
+Artifacts MMO Crew is moving from long-running per-character `autoXXX` tasks toward a
 crew orchestrator that observes shared state and schedules bounded Activities.
 See [`../CONTEXT.md`](../CONTEXT.md) for the project vocabulary.
 

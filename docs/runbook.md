@@ -1,6 +1,6 @@
-# Runbook
+# Artifacts MMO Crew Runbook
 
-Operational guidance for running and diagnosing the Artifacts MMO bot. See
+Operational guidance for running and diagnosing Artifacts MMO Crew. See
 [`../README.md`](../README.md) for installation and
 [`architecture.md`](architecture.md) for design.
 
@@ -21,9 +21,9 @@ pnpm build
 pnpm start
 ```
 
-Do not run several bot processes with the same account. Action and data rate
-limits are shared across the account/IP, while each process only knows its own
-local request history.
+Do not run several instances of Artifacts MMO Crew with the same account.
+Action and data rate limits are shared across the account/IP, while each process
+only knows its own local request history.
 
 ## Runtime configuration
 
@@ -136,7 +136,7 @@ Rate limit exceeded: 2000 per 1 hour
 
 Checks:
 
-1. confirm only one bot process is running;
+1. confirm only one Artifacts MMO Crew process is running;
 2. stop additional scripts or browser traffic using the same account/IP;
 3. inspect whether a decision loop repeatedly requests dynamic data;
 4. avoid repeated `tsx watch` restarts during the server's hourly window;
@@ -233,12 +233,12 @@ test only when the mutant represents a meaningful contract.
 
 Before any live check:
 
-- stop the normal bot process;
+- stop the normal Artifacts MMO Crew process;
 - prefer read-only endpoints;
 - avoid loops and broad pagination unless required;
 - account for the existing hourly server window;
 - never commit scratch scripts containing account-specific data;
-- restart the main bot only after the check exits.
+- restart the main Artifacts MMO Crew process only after the check exits.
 
 Unit and MSW tests remain the default verification path. Live checks confirm
 server behavior; they do not replace deterministic tests.

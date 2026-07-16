@@ -52,7 +52,7 @@ const runConfiguredTasks = (): Promise<void> => {
 };
 
 const main = async (): Promise<void> => {
-  logger.info('Artifacts MMO bot starting up');
+  logger.info('Artifacts MMO Crew starting up');
 
   await (existsSync(ORCHESTRATION_CONFIG_PATH)
     ? runConfiguredOrchestration()
@@ -60,6 +60,6 @@ const main = async (): Promise<void> => {
 };
 
 main().catch((error: unknown) => {
-  logger.error(error, 'Fatal error while running the bot');
+  logger.error(error, 'Fatal error while running Artifacts MMO Crew');
   process.exitCode = 1;
 });

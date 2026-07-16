@@ -1,11 +1,12 @@
 {
-  "name": "artifactsmmo-bot",
+  "name": "artifactsmmo-crew",
   "version": "0.0.1",
   "private": true,
-  "description": "Personal TypeScript bot for managing a 5-character crew in Artifacts MMO.",
+  "description": "Personal TypeScript crew orchestrator for managing five characters in Artifacts MMO.",
   "keywords": [
     "artifactsmmo",
-    "bot",
+    "crew",
+    "orchestration",
     "typescript"
   ],
   "license": "UNLICENSED",

@@ -1,4 +1,4 @@
-# Artifacts MMO Bot
+# Artifacts MMO Crew
 
 This context coordinates an autonomous crew while keeping game operations,
 bounded execution, and cross-character decisions distinct.
