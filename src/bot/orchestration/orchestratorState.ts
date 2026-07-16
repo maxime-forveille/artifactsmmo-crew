@@ -1,5 +1,12 @@
 import type { Activity } from "../activities/activity.js";
 
+export type EquipItemGoal = Readonly<{
+  characterName: string;
+  id: string;
+  itemCode: string;
+  type: "equipItem";
+}>;
+
 export type ReplenishBankItemGoal = Readonly<{
   id: string;
   itemCode: string;
@@ -7,7 +14,7 @@ export type ReplenishBankItemGoal = Readonly<{
   type: "replenishBankItem";
 }>;
 
-export type Goal = ReplenishBankItemGoal;
+export type Goal = EquipItemGoal | ReplenishBankItemGoal;
 
 export type ItemIntent = Readonly<{
   itemCode: string;

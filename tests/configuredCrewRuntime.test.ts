@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createConfiguredCrewRuntime,
+  resolveConfiguredItems,
   resolveConfiguredResources,
 } from "../src/bot/runtime/configuredCrewRuntime.js";
 import { ArtifactsApiError, type ArtifactsClient } from "../src/client/index.js";
@@ -10,7 +11,25 @@ import type { components } from "../src/client/schema.js";
 import type { OrchestrationConfig } from "../src/utils/orchestrationConfig.js";
 
 type BankPage = components["schemas"]["DataPage_SimpleItemSchema_"];
+type Character = components["schemas"]["CharacterSchema"];
+type Item = components["schemas"]["ItemSchema"];
 type Resource = components["schemas"]["ResourceSchema"];
+
+const buildCharacter = (): Character => ({
+  ...({} as Character),
+  inventory: [],
+  level: 5,
+  name: "Stan",
+  weapon_slot: "copper_dagger",
+});
+
+const buildItem = (code: string): Item => ({
+  ...({} as Item),
+  code,
+  level: 1,
+  name: code,
+  type: "weapon",
+});
 
 const buildResource = (code: string): Resource => ({
   code,
@@ -39,6 +58,17 @@ const buildConfig = (): OrchestrationConfig => ({
   ],
 });
 
+const buildEquipmentConfig = (): OrchestrationConfig => ({
+  goals: [
+    {
+      characterName: "Stan",
+      id: "equip-stan-dagger",
+      itemCode: "copper_dagger",
+      type: "equipItem",
+    },
+  ],
+});
+
 const buildBankPage = (): BankPage => ({
   data: [
     { code: "ash_wood", quantity: 25 },
@@ -48,6 +78,40 @@ const buildBankPage = (): BankPage => ({
   pages: 1,
   size: 100,
   total: 2,
+});
+
+describe("resolveConfiguredItems", () => {
+  it("resolves equipment targets while preserving Goal ids", async () => {
+    const getItem = vi.fn((code: string) => okAsync({ data: buildItem(code) }));
+    const client = { getItem } as Pick<ArtifactsClient, "getItem">;
+
+    const result = await resolveConfiguredItems(client, buildEquipmentConfig());
+
+    expect(result.isOk() && result.value).toEqual([
+      { goalId: "equip-stan-dagger", item: buildItem("copper_dagger") },
+    ]);
+    expect(getItem).toHaveBeenCalledWith("copper_dagger");
+  });
+
+  it("propagates an item catalog failure", async () => {
+    const apiError = new ArtifactsApiError("unavailable", 503, {});
+    const getItem = vi.fn(() => errAsync(apiError));
+    const client = { getItem } as Pick<ArtifactsClient, "getItem">;
+
+    const result = await resolveConfiguredItems(client, buildEquipmentConfig());
+
+    expect(result.isErr() && result.error).toBe(apiError);
+  });
+
+  it("does not query items for resource Goals", async () => {
+    const getItem = vi.fn();
+    const client = { getItem } as unknown as Pick<ArtifactsClient, "getItem">;
+
+    const result = await resolveConfiguredItems(client, buildConfig());
+
+    expect(result.isOk() && result.value).toEqual([]);
+    expect(getItem).not.toHaveBeenCalled();
+  });
 });
 
 describe("resolveConfiguredResources", () => {
@@ -89,6 +153,30 @@ describe("resolveConfiguredResources", () => {
 });
 
 describe("createConfiguredCrewRuntime", () => {
+  it("completes an already-equipped configured Goal without starting an Action", async () => {
+    const getBankItems = vi.fn(() => okAsync({ ...buildBankPage(), data: [], total: 0 }));
+    const getItem = vi.fn((code: string) => okAsync({ data: buildItem(code) }));
+    const getMyCharacters = vi.fn(() => okAsync({ data: [buildCharacter()] }));
+    const client = {
+      getBankItems,
+      getItem,
+      getMyCharacters,
+    } as unknown as ArtifactsClient;
+
+    const result = await createConfiguredCrewRuntime(client, {
+      config: buildEquipmentConfig(),
+      reportError: vi.fn(),
+      waitBeforeRetry: vi.fn(async () => undefined),
+    });
+    const runtime = result._unsafeUnwrap();
+
+    expect(runtime.start().isOk()).toBe(true);
+    expect(runtime.getState()).toEqual({ goals: [], reservations: [] });
+    expect(getItem).toHaveBeenCalledWith("copper_dagger");
+    expect(getMyCharacters).toHaveBeenCalledOnce();
+    expect(getBankItems).toHaveBeenCalledOnce();
+  });
+
   it("builds a runtime from resolved resources and validated Goals", async () => {
     const getResource = vi.fn((code: string) => okAsync({ data: buildResource(code) }));
     const getBankItems = vi.fn(() => okAsync(buildBankPage()));

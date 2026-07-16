@@ -1,10 +1,11 @@
 import { ResultAsync } from "neverthrow";
 
 import {
-  createConfiguredResourceReplenishmentPlanner,
-  type ConfiguredResourceReplenishmentError,
+  createConfiguredGoalPlanner,
+  type ConfiguredGoalPlannerError,
+  type ResolvedGoalItem,
   type ResolvedGoalResource,
-} from "../orchestration/configuredResourceReplenishment.js";
+} from "../orchestration/configuredGoalPlanner.js";
 import { createCrewRuntime, type CrewRuntimeStartError } from "./crewRuntime.js";
 import type { RollingActivityCoordinator } from "./rollingActivityCoordinator.js";
 import { type ArtifactsApiError, type ArtifactsClient } from "../../client/index.js";
@@ -19,31 +20,55 @@ type ConfiguredCrewRuntimeOptions = Readonly<{
   waitBeforeRetry: () => Promise<void>;
 }>;
 
+export const resolveConfiguredItems = (
+  client: Pick<ArtifactsClient, "getItem">,
+  config: OrchestrationConfig,
+): ResultAsync<readonly ResolvedGoalItem[], ArtifactsApiError> =>
+  ResultAsync.combine(
+    config.goals.flatMap((goal) =>
+      goal.type === "equipItem"
+        ? [
+            client.getItem(goal.itemCode).map((response) => ({
+              goalId: goal.id,
+              item: response.data,
+            })),
+          ]
+        : [],
+    ),
+  );
+
 export const resolveConfiguredResources = (
   client: Pick<ArtifactsClient, "getResource">,
   config: OrchestrationConfig,
 ): ResultAsync<readonly ResolvedGoalResource[], ArtifactsApiError> =>
   ResultAsync.combine(
-    config.goals.map((goal) =>
-      client.getResource(goal.resourceCode).map((response) => ({
-        goalId: goal.id,
-        resource: response.data,
-      })),
+    config.goals.flatMap((goal) =>
+      goal.type === "replenishBankItem"
+        ? [
+            client.getResource(goal.resourceCode).map((response) => ({
+              goalId: goal.id,
+              resource: response.data,
+            })),
+          ]
+        : [],
     ),
   );
 
-/** Resolves configured catalog resources before creating the live crew runtime. */
+/** Resolves configured catalog targets before creating the live crew runtime. */
 export const createConfiguredCrewRuntime = (
   client: ArtifactsClient,
   options: ConfiguredCrewRuntimeOptions,
 ): ResultAsync<
-  RollingActivityCoordinator<ConfiguredResourceReplenishmentError, CrewRuntimeStartError>,
+  RollingActivityCoordinator<ConfiguredGoalPlannerError, CrewRuntimeStartError>,
   ArtifactsApiError
 > =>
-  resolveConfiguredResources(client, options.config).andThen((resolvedResources) =>
+  ResultAsync.combine([
+    resolveConfiguredItems(client, options.config),
+    resolveConfiguredResources(client, options.config),
+  ]).andThen(([resolvedItems, resolvedResources]) =>
     createCrewRuntime(client, {
       initialState: buildInitialOrchestratorState(options.config),
-      plan: createConfiguredResourceReplenishmentPlanner(resolvedResources),
+      plan: createConfiguredGoalPlanner(resolvedItems, resolvedResources),
       reportError: options.reportError,
       waitBeforeRetry: options.waitBeforeRetry,
     }),

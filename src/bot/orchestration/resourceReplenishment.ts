@@ -100,7 +100,7 @@ export const planResourceReplenishment = (
 ): Result<ResourceReplenishmentPlan, ResourceReplenishmentError> => {
   const goal = state.goals[0];
 
-  if (goal === undefined) {
+  if (goal === undefined || goal.type !== "replenishBankItem") {
     return ok(unchangedPlan(state));
   }
 

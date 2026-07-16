@@ -55,6 +55,32 @@ describe("parseOrchestrationConfig", () => {
     });
   });
 
+  it("accepts an explicit character equipment Goal", () => {
+    expect(
+      parseOrchestrationConfig(
+        buildRawConfig({
+          goals: [
+            {
+              characterName: "Stan",
+              id: "equip-stan-dagger",
+              itemCode: "copper_dagger",
+              type: "equipItem",
+            },
+          ],
+        }),
+      ),
+    ).toEqual({
+      goals: [
+        {
+          characterName: "Stan",
+          id: "equip-stan-dagger",
+          itemCode: "copper_dagger",
+          type: "equipItem",
+        },
+      ],
+    });
+  });
+
   it.each([0, -1, 1.5])("rejects invalid bank quantity %s", (minimumBankQuantity) => {
     expect(() =>
       parseOrchestrationConfig(
@@ -208,6 +234,33 @@ describe("loadOrchestrationConfig", () => {
 });
 
 describe("buildInitialOrchestratorState", () => {
+  it("preserves equipment Goal ownership", () => {
+    const config = parseOrchestrationConfig(
+      buildRawConfig({
+        goals: [
+          {
+            characterName: "Stan",
+            id: "equip-stan-dagger",
+            itemCode: "copper_dagger",
+            type: "equipItem",
+          },
+        ],
+      }),
+    );
+
+    expect(buildInitialOrchestratorState(config)).toEqual({
+      goals: [
+        {
+          characterName: "Stan",
+          id: "equip-stan-dagger",
+          itemCode: "copper_dagger",
+          type: "equipItem",
+        },
+      ],
+      reservations: [],
+    });
+  });
+
   it("removes Adapter-only resource codes from the domain state", () => {
     const config = parseOrchestrationConfig(buildRawConfig());
 

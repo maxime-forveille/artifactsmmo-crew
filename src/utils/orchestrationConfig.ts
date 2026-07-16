@@ -6,13 +6,21 @@ import type { OrchestratorState } from "../bot/orchestration/orchestratorState.j
 
 const nonEmptyString = v.pipe(v.string(), v.minLength(1));
 
-const configuredGoalSchema = v.strictObject({
-  id: nonEmptyString,
-  itemCode: nonEmptyString,
-  minimumBankQuantity: v.pipe(v.number(), v.integer(), v.minValue(1)),
-  resourceCode: nonEmptyString,
-  type: v.literal("replenishBankItem"),
-});
+const configuredGoalSchema = v.variant("type", [
+  v.strictObject({
+    characterName: nonEmptyString,
+    id: nonEmptyString,
+    itemCode: nonEmptyString,
+    type: v.literal("equipItem"),
+  }),
+  v.strictObject({
+    id: nonEmptyString,
+    itemCode: nonEmptyString,
+    minimumBankQuantity: v.pipe(v.number(), v.integer(), v.minValue(1)),
+    resourceCode: nonEmptyString,
+    type: v.literal("replenishBankItem"),
+  }),
+]);
 
 const orchestrationConfigSchema = v.strictObject({
   goals: v.pipe(
@@ -43,12 +51,21 @@ export const parseOrchestrationConfig = (raw: string): OrchestrationConfig => {
 
 /** Converts validated configuration into serializable initial policy state. */
 export const buildInitialOrchestratorState = (config: OrchestrationConfig): OrchestratorState => ({
-  goals: config.goals.map(({ id, itemCode, minimumBankQuantity, type }) => ({
-    id,
-    itemCode,
-    minimumBankQuantity,
-    type,
-  })),
+  goals: config.goals.map((goal) =>
+    goal.type === "equipItem"
+      ? {
+          characterName: goal.characterName,
+          id: goal.id,
+          itemCode: goal.itemCode,
+          type: goal.type,
+        }
+      : {
+          id: goal.id,
+          itemCode: goal.itemCode,
+          minimumBankQuantity: goal.minimumBankQuantity,
+          type: goal.type,
+        },
+  ),
   reservations: [],
 });
 

@@ -87,10 +87,27 @@ model and migration plan.
 ## Runtime assignments
 
 The entrypoint starts configured crew orchestration when `orchestration.json`
-exists. The file contains an ordered `goals` array; every Goal must explicitly
-provide `id`, `itemCode`, `minimumBankQuantity`, `resourceCode`, and the
-`replenishBankItem` type. The bot validates the full configuration and resolves
-every resource from the catalog before starting any Activity.
+exists. The file contains an ordered `goals` array. A `replenishBankItem` Goal
+requires `id`, `itemCode`, `minimumBankQuantity`, and `resourceCode`. An
+`equipItem` Goal requires `id`, `characterName`, and `itemCode`:
+
+```json
+{
+  "goals": [
+    {
+      "characterName": "Stan",
+      "id": "equip-stan-dagger",
+      "itemCode": "copper_dagger",
+      "type": "equipItem"
+    }
+  ]
+}
+```
+
+The equipment Goal crafts the target when possible, then equips it once held.
+A missing material, insufficient profession level, or banked target currently
+leaves the Goal blocked; automatic prerequisite farming and bank retrieval are
+the next orchestration slices.
 
 When `orchestration.json` is absent, `tasks.json` remains the transitional human
 Adapter. It is validated with Valibot and reloaded every 10 seconds without

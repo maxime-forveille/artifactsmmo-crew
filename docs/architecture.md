@@ -96,11 +96,11 @@ transport/server failures for retry, and refreshes observations. Goals, policy,
 reporting, and retry timing remain explicit inputs; the adapter does not invent
 bank thresholds or autonomous priorities.
 
-`runtime/configuredCrewRuntime.ts` resolves every configured resource against
-the static catalog before constructing that adapter. The resulting Goal-to-
-resource mapping feeds a pure multi-Goal replenishment policy. An unresolved
-catalog entry prevents startup rather than allowing a partial or ambiguous
-runtime configuration.
+`runtime/configuredCrewRuntime.ts` resolves every configured resource and item
+against the static catalog before constructing that adapter. The resulting
+Goal-to-target mappings feed one pure planner in global priority order. An
+unresolved catalog entry prevents startup rather than allowing a partial or
+ambiguous runtime configuration.
 
 `runtime/taskSupervisor.ts` currently supervises long-running tasks with one
 `AbortController` per character. Its useful behavior should survive the
@@ -167,15 +167,20 @@ consumption. It becomes a Reservation only after the runtime starts that
 Activity successfully; runtime promises and cancellation handles remain
 outside orchestration state.
 
-`orchestration/resourceReplenishment.ts` provides the first Activity-aware pure
-transition. It completes a satisfied unreserved bank Goal, avoids work already
-reserved, excludes busy characters, and otherwise proposes one `farmResource`
-Activity for the strongest eligible gatherer. The configured planner applies
-that transition to every Goal in priority order. Its proposals act as temporary
-Reservations during the same decision, allowing independent targets to use
-different idle characters without duplicating in-flight work. The exact
-resources remain explicit planning inputs until source-selection policy is
-designed.
+`orchestration/resourceReplenishment.ts` completes a satisfied unreserved bank
+Goal, avoids work already reserved, excludes busy characters, and otherwise
+proposes one `farmResource` Activity for the strongest eligible gatherer.
+
+`orchestration/equipmentProgression.ts` advances an explicit character equipment
+Goal. It crafts an absent craftable target, equips it once held, and completes
+when the expected slot contains it. A blocked craft or equip stays idle for a
+later planner layer to turn into material, profession, or retrieval Goals.
+
+`orchestration/configuredGoalPlanner.ts` applies both transitions in global
+priority order. Proposals act as temporary Reservations during the same
+decision, allowing independent targets to use different idle characters without
+duplicating in-flight work. Exact catalog targets remain explicit planning
+inputs until automatic target selection is designed.
 
 `orchestration/activityLifecycle.ts` owns the pure Reservation transitions. A
 successfully started Activity is promoted from a proposal to a Reservation only

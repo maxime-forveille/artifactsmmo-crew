@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createConfiguredResourceReplenishmentPlanner,
+  createConfiguredGoalPlanner,
+  GoalItemNotResolvedError,
   GoalResourceNotResolvedError,
-} from "../src/bot/orchestration/configuredResourceReplenishment.js";
+} from "../src/bot/orchestration/configuredGoalPlanner.js";
 import type { CrewSnapshot } from "../src/bot/orchestration/crewSnapshot.js";
 import type {
+  EquipItemGoal,
   OrchestratorState,
   ReplenishBankItemGoal,
 } from "../src/bot/orchestration/orchestratorState.js";
@@ -16,11 +18,15 @@ import {
 import type { components } from "../src/client/schema.js";
 
 type Character = components["schemas"]["CharacterSchema"];
+type Item = components["schemas"]["ItemSchema"];
 
 const buildCharacter = (name: string): Character => ({
   ...({} as Character),
+  inventory: [],
+  level: 10,
   mining_level: 10,
   name,
+  weapon_slot: "wooden_stick",
   woodcutting_level: 10,
 });
 
@@ -29,6 +35,21 @@ const buildGoal = (id: string, itemCode: string): ReplenishBankItemGoal => ({
   itemCode,
   minimumBankQuantity: 50,
   type: "replenishBankItem",
+});
+
+const buildEquipmentGoal = (): EquipItemGoal => ({
+  characterName: "Stan",
+  id: "equip-stan-dagger",
+  itemCode: "copper_dagger",
+  type: "equipItem",
+});
+
+const buildItem = (): Item => ({
+  ...({} as Item),
+  code: "copper_dagger",
+  craft: { items: [], level: 5, quantity: 1, skill: "weaponcrafting" },
+  level: 5,
+  type: "weapon",
 });
 
 const buildResource = (code: string, itemCode: string, skill: Resource["skill"]): Resource => ({
@@ -44,7 +65,9 @@ const ashGoal = buildGoal("goal-ash", "ash_wood");
 const copperResource = buildResource("copper_rocks", "copper_ore", "mining");
 const ashResource = buildResource("ash_tree", "ash_wood", "woodcutting");
 
-const buildState = (goals = [copperGoal, ashGoal]): OrchestratorState => ({
+const buildState = (
+  goals: OrchestratorState["goals"] = [copperGoal, ashGoal],
+): OrchestratorState => ({
   goals,
   reservations: [],
 });
@@ -56,12 +79,15 @@ const buildSnapshot = (bank: CrewSnapshot["bank"] = []): CrewSnapshot => ({
 });
 
 const buildPlanner = () =>
-  createConfiguredResourceReplenishmentPlanner([
-    { goalId: copperGoal.id, resource: copperResource },
-    { goalId: ashGoal.id, resource: ashResource },
-  ]);
+  createConfiguredGoalPlanner(
+    [],
+    [
+      { goalId: copperGoal.id, resource: copperResource },
+      { goalId: ashGoal.id, resource: ashResource },
+    ],
+  );
 
-describe("createConfiguredResourceReplenishmentPlanner", () => {
+describe("createConfiguredGoalPlanner", () => {
   it("uses the resource resolved for the highest-priority Goal", () => {
     const result = buildPlanner()(buildSnapshot(), buildState());
 
@@ -123,6 +149,68 @@ describe("createConfiguredResourceReplenishmentPlanner", () => {
       ],
       state: buildState(),
     });
+  });
+
+  it("preserves global priority across equipment and resource Goals", () => {
+    const equipmentGoal = buildEquipmentGoal();
+    const state = buildState([equipmentGoal, copperGoal]);
+    const planner = createConfiguredGoalPlanner(
+      [{ goalId: equipmentGoal.id, item: buildItem() }],
+      [{ goalId: copperGoal.id, resource: copperResource }],
+    );
+    const snapshot = {
+      ...buildSnapshot(),
+      characters: [buildCharacter("Stan"), buildCharacter("Cartman")],
+    };
+
+    const result = planner(snapshot, state);
+
+    expect(result._unsafeUnwrap()).toEqual({
+      activities: [
+        {
+          activity: { itemCode: "copper_dagger", quantity: 1, type: "craftItem" },
+          characterName: "Stan",
+          consumes: [],
+          goalId: "equip-stan-dagger",
+          produces: [{ itemCode: "copper_dagger" }],
+        },
+        {
+          activity: { resourceCode: "copper_rocks", type: "farmResource" },
+          characterName: "Cartman",
+          consumes: [],
+          goalId: "goal-copper",
+          produces: [{ itemCode: "copper_ore" }],
+        },
+      ],
+      state,
+    });
+  });
+
+  it("continues lower-priority work after an equipment Activity is blocked", () => {
+    const equipmentGoal = buildEquipmentGoal();
+    const state = buildState([equipmentGoal, copperGoal]);
+    const planner = createConfiguredGoalPlanner(
+      [{ goalId: equipmentGoal.id, item: buildItem() }],
+      [{ goalId: copperGoal.id, resource: copperResource }],
+    );
+    const snapshot = {
+      ...buildSnapshot(),
+      characters: [buildCharacter("Stan"), buildCharacter("Cartman")],
+    };
+
+    const result = planner(snapshot, state, {
+      event: { goalId: equipmentGoal.id, type: "blocked" },
+    });
+
+    expect(result._unsafeUnwrap().activities).toEqual([
+      {
+        activity: { resourceCode: "copper_rocks", type: "farmResource" },
+        characterName: "Cartman",
+        consumes: [],
+        goalId: "goal-copper",
+        produces: [{ itemCode: "copper_ore" }],
+      },
+    ]);
   });
 
   it("continues to lower-priority Goals while a higher-priority Goal is reserved", () => {
@@ -188,9 +276,10 @@ describe("createConfiguredResourceReplenishmentPlanner", () => {
   });
 
   it("propagates a resource validation failure", () => {
-    const planner = createConfiguredResourceReplenishmentPlanner([
-      { goalId: copperGoal.id, resource: ashResource },
-    ]);
+    const planner = createConfiguredGoalPlanner(
+      [],
+      [{ goalId: copperGoal.id, resource: ashResource }],
+    );
 
     const result = planner(buildSnapshot(), buildState([copperGoal]));
 
@@ -200,8 +289,23 @@ describe("createConfiguredResourceReplenishmentPlanner", () => {
     );
   });
 
+  it("returns a typed error when an equipment Goal has no resolved item", () => {
+    const equipmentGoal = buildEquipmentGoal();
+    const planner = createConfiguredGoalPlanner([], []);
+
+    const result = planner(buildSnapshot(), buildState([equipmentGoal]));
+
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      goalId: "equip-stan-dagger",
+      message: 'No item was resolved for Goal "equip-stan-dagger"',
+      name: "GoalItemNotResolvedError",
+    });
+    expect(result._unsafeUnwrapErr()).toBeInstanceOf(GoalItemNotResolvedError);
+  });
+
   it("returns a typed error when a Goal has no resolved resource", () => {
-    const planner = createConfiguredResourceReplenishmentPlanner([]);
+    const planner = createConfiguredGoalPlanner([], []);
 
     const result = planner(buildSnapshot(), buildState([copperGoal]));
 

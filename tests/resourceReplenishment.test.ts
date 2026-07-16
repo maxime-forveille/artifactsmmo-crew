@@ -267,6 +267,24 @@ describe("planResourceReplenishment", () => {
     );
   });
 
+  it("does nothing when the first Goal is not a bank replenishment Goal", () => {
+    const state: OrchestratorState = {
+      goals: [
+        {
+          characterName: "Stan",
+          id: "equip-stan-dagger",
+          itemCode: "copper_dagger",
+          type: "equipItem",
+        },
+      ],
+      reservations: [],
+    };
+
+    expect(
+      planResourceReplenishment(buildSnapshot(), state, buildResource())._unsafeUnwrap(),
+    ).toEqual({ activities: [], state });
+  });
+
   it("does nothing when there are no Goals", () => {
     const state = buildState({ goals: [] });
 
