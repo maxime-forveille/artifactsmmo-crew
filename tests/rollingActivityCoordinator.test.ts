@@ -1,23 +1,33 @@
-import { err, errAsync, ok, okAsync, ResultAsync, type Result } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import {
+  err,
+  errAsync,
+  ok,
+  okAsync,
+  ResultAsync,
+  type Result,
+} from 'neverthrow';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   reserveStartedActivity,
   type StartActivityError,
-} from "../src/bot/orchestration/activityLifecycle.js";
-import type { CrewSnapshot } from "../src/bot/orchestration/crewSnapshot.js";
+} from '../src/bot/orchestration/activityLifecycle.js';
+import type { CrewSnapshot } from '../src/bot/orchestration/crewSnapshot.js';
 import type {
   ActivityAssignment,
   OrchestratorState,
   ReplenishBankItemGoal,
-} from "../src/bot/orchestration/orchestratorState.js";
-import type { ExecutableActivity } from "../src/bot/runtime/activityDispatcher.js";
-import type { ActivityRunOutcome, LaunchedActivity } from "../src/bot/runtime/activityLauncher.js";
-import type { ActivityPlan } from "../src/bot/runtime/activityScheduler.js";
+} from '../src/bot/orchestration/orchestratorState.js';
+import type { ExecutableActivity } from '../src/bot/runtime/activityDispatcher.js';
+import type {
+  ActivityRunOutcome,
+  LaunchedActivity,
+} from '../src/bot/runtime/activityLauncher.js';
+import type { ActivityPlan } from '../src/bot/runtime/activityScheduler.js';
 import {
   createRollingActivityCoordinator,
   type RollingActivityPlanner,
-} from "../src/bot/runtime/rollingActivityCoordinator.js";
+} from '../src/bot/runtime/rollingActivityCoordinator.js';
 
 class TestActivityError extends Error {}
 class TestPlanError extends Error {}
@@ -41,23 +51,26 @@ const buildGoal = (id: string, itemCode: string): ReplenishBankItemGoal => ({
   id,
   itemCode,
   minimumBankQuantity: 50,
-  type: "replenishBankItem",
+  type: 'replenishBankItem',
 });
 
 const buildAssignment = (
   characterName: string,
   goalId: string,
-  resourceCode = "copper_rocks",
+  resourceCode = 'copper_rocks',
 ): ActivityAssignment<ExecutableActivity> => ({
-  activity: { resourceCode, type: "farmResource" },
+  activity: { resourceCode, type: 'farmResource' },
   characterName,
   consumes: [],
   goalId,
-  produces: [{ itemCode: "copper_ore" }],
+  produces: [{ itemCode: 'copper_ore' }],
 });
 
 const buildState = (): OrchestratorState => ({
-  goals: [buildGoal("goal-copper", "copper_ore"), buildGoal("goal-ash", "ash_wood")],
+  goals: [
+    buildGoal('goal-copper', 'copper_ore'),
+    buildGoal('goal-ash', 'ash_wood'),
+  ],
   reservations: [],
 });
 
@@ -71,18 +84,22 @@ const completedOutcome = (
   characterName: string,
   goalId: string,
 ): ActivityRunOutcome<TestActivityError> => ({
-  event: { characterName, goalId, type: "completed" },
+  event: { characterName, goalId, type: 'completed' },
 });
 
 const createStarter = () => {
-  const completions = new Map<string, Deferred<ActivityRunOutcome<TestActivityError>>>();
+  const completions = new Map<
+    string,
+    Deferred<ActivityRunOutcome<TestActivityError>>
+  >();
   const startActivity = vi.fn(
     (
       state: OrchestratorState,
       assignment: ActivityAssignment<ExecutableActivity>,
     ): Result<LaunchedActivity<TestActivityError>, StartActivityError> =>
       reserveStartedActivity(state, assignment).map((reservedState) => {
-        const completion = createDeferred<ActivityRunOutcome<TestActivityError>>();
+        const completion =
+          createDeferred<ActivityRunOutcome<TestActivityError>>();
         completions.set(assignment.characterName, completion);
 
         return { completion: completion.promise, state: reservedState };
@@ -92,30 +109,36 @@ const createStarter = () => {
   return { completions, startActivity };
 };
 
-const unchangedPlan = (state: OrchestratorState): Result<ActivityPlan, TestPlanError> =>
-  ok({ activities: [], state });
+const unchangedPlan = (
+  state: OrchestratorState,
+): Result<ActivityPlan, TestPlanError> => ok({ activities: [], state });
 
 const noSnapshotRetry = {
   shouldRetrySnapshotFailure: (_error: TestSnapshotError) => false,
   waitBeforeSnapshotRetry: async () => undefined,
 };
 
-describe("createRollingActivityCoordinator", () => {
-  it("starts the initial policy plan and exposes its Reservations", () => {
-    const assignment = buildAssignment("Stan", "goal-copper");
-    const initialSnapshot = buildSnapshot("2026-07-15T12:00:00.000Z");
+describe('createRollingActivityCoordinator', () => {
+  it('starts the initial policy plan and exposes its Reservations', () => {
+    const assignment = buildAssignment('Stan', 'goal-copper');
+    const initialSnapshot = buildSnapshot('2026-07-15T12:00:00.000Z');
     const initialState = buildState();
-    const plan: RollingActivityPlanner<TestActivityError, TestPlanError> = vi.fn(
-      (_snapshot, state) => ok({ activities: [assignment], state }),
-    );
+    const plan: RollingActivityPlanner<TestActivityError, TestPlanError> =
+      vi.fn((_snapshot: CrewSnapshot, state: OrchestratorState) =>
+        ok({ activities: [assignment], state }),
+      );
     const { startActivity } = createStarter();
-    const coordinator = createRollingActivityCoordinator(initialState, initialSnapshot, {
-      ...noSnapshotRetry,
-      plan,
-      refreshSnapshot: () => okAsync(initialSnapshot),
-      reportError: vi.fn(),
-      startActivity,
-    });
+    const coordinator = createRollingActivityCoordinator(
+      initialState,
+      initialSnapshot,
+      {
+        ...noSnapshotRetry,
+        plan,
+        refreshSnapshot: () => okAsync(initialSnapshot),
+        reportError: vi.fn(),
+        startActivity,
+      },
+    );
 
     const result = coordinator.start();
 
@@ -125,29 +148,34 @@ describe("createRollingActivityCoordinator", () => {
     expect(coordinator.getSnapshot()).toBe(initialSnapshot);
   });
 
-  it("refreshes and replans after an Activity completes", async () => {
-    const assignment = buildAssignment("Stan", "goal-copper");
-    const initialSnapshot = buildSnapshot("2026-07-15T12:00:00.000Z");
-    const refreshedSnapshot = buildSnapshot("2026-07-15T12:01:00.000Z");
-    const plan = vi.fn<RollingActivityPlanner<TestActivityError, TestPlanError>>(
-      (_snapshot, state, previousOutcome) =>
-        previousOutcome === undefined
-          ? ok({ activities: [assignment], state })
-          : unchangedPlan(state),
+  it('refreshes and replans after an Activity completes', async () => {
+    const assignment = buildAssignment('Stan', 'goal-copper');
+    const initialSnapshot = buildSnapshot('2026-07-15T12:00:00.000Z');
+    const refreshedSnapshot = buildSnapshot('2026-07-15T12:01:00.000Z');
+    const plan = vi.fn<
+      RollingActivityPlanner<TestActivityError, TestPlanError>
+    >((_snapshot, state, previousOutcome) =>
+      previousOutcome === undefined
+        ? ok({ activities: [assignment], state })
+        : unchangedPlan(state),
     );
     const reportError = vi.fn();
     const { completions, startActivity } = createStarter();
-    const coordinator = createRollingActivityCoordinator(buildState(), initialSnapshot, {
-      ...noSnapshotRetry,
-      plan,
-      refreshSnapshot: () => okAsync(refreshedSnapshot),
-      reportError,
-      startActivity,
-    });
+    const coordinator = createRollingActivityCoordinator(
+      buildState(),
+      initialSnapshot,
+      {
+        ...noSnapshotRetry,
+        plan,
+        refreshSnapshot: () => okAsync(refreshedSnapshot),
+        reportError,
+        startActivity,
+      },
+    );
     coordinator.start();
 
-    const outcome = completedOutcome("Stan", "goal-copper");
-    completions.get("Stan")?.resolve(outcome);
+    const outcome = completedOutcome('Stan', 'goal-copper');
+    completions.get('Stan')?.resolve(outcome);
     await coordinator.waitForIdle();
 
     expect(plan).toHaveBeenCalledTimes(2);
@@ -162,36 +190,41 @@ describe("createRollingActivityCoordinator", () => {
     expect(reportError).not.toHaveBeenCalled();
   });
 
-  it("serializes simultaneous completions before each replan", async () => {
-    const stan = buildAssignment("Stan", "goal-copper");
-    const kyle = buildAssignment("Kyle", "goal-ash", "ash_tree");
-    const initialSnapshot = buildSnapshot("2026-07-15T12:00:00.000Z");
-    const firstSnapshot = buildSnapshot("2026-07-15T12:01:00.000Z");
-    const secondSnapshot = buildSnapshot("2026-07-15T12:02:00.000Z");
-    const plan = vi.fn<RollingActivityPlanner<TestActivityError, TestPlanError>>(
-      (_snapshot, state, previousOutcome) =>
-        previousOutcome === undefined
-          ? ok({ activities: [stan, kyle], state })
-          : unchangedPlan(state),
+  it('serializes simultaneous completions before each replan', async () => {
+    const stan = buildAssignment('Stan', 'goal-copper');
+    const kyle = buildAssignment('Kyle', 'goal-ash', 'ash_tree');
+    const initialSnapshot = buildSnapshot('2026-07-15T12:00:00.000Z');
+    const firstSnapshot = buildSnapshot('2026-07-15T12:01:00.000Z');
+    const secondSnapshot = buildSnapshot('2026-07-15T12:02:00.000Z');
+    const plan = vi.fn<
+      RollingActivityPlanner<TestActivityError, TestPlanError>
+    >((_snapshot, state, previousOutcome) =>
+      previousOutcome === undefined
+        ? ok({ activities: [stan, kyle], state })
+        : unchangedPlan(state),
     );
     const refreshSnapshot = vi
       .fn()
       .mockReturnValueOnce(okAsync(firstSnapshot))
       .mockReturnValueOnce(okAsync(secondSnapshot));
     const { completions, startActivity } = createStarter();
-    const coordinator = createRollingActivityCoordinator(buildState(), initialSnapshot, {
-      ...noSnapshotRetry,
-      plan,
-      refreshSnapshot,
-      reportError: vi.fn(),
-      startActivity,
-    });
+    const coordinator = createRollingActivityCoordinator(
+      buildState(),
+      initialSnapshot,
+      {
+        ...noSnapshotRetry,
+        plan,
+        refreshSnapshot,
+        reportError: vi.fn(),
+        startActivity,
+      },
+    );
     coordinator.start();
 
-    const stanOutcome = completedOutcome("Stan", "goal-copper");
-    const kyleOutcome = completedOutcome("Kyle", "goal-ash");
-    completions.get("Stan")?.resolve(stanOutcome);
-    completions.get("Kyle")?.resolve(kyleOutcome);
+    const stanOutcome = completedOutcome('Stan', 'goal-copper');
+    const kyleOutcome = completedOutcome('Kyle', 'goal-ash');
+    completions.get('Stan')?.resolve(stanOutcome);
+    completions.get('Kyle')?.resolve(kyleOutcome);
     await coordinator.waitForIdle();
 
     expect(plan).toHaveBeenNthCalledWith(
@@ -209,51 +242,53 @@ describe("createRollingActivityCoordinator", () => {
     expect(coordinator.getState().reservations).toEqual([]);
   });
 
-  it("passes Blocker details to the next policy decision", async () => {
-    const assignment = buildAssignment("Stan", "goal-copper");
-    const blocker = new TestActivityError("missing material");
+  it('passes Blocker details to the next policy decision', async () => {
+    const assignment = buildAssignment('Stan', 'goal-copper');
+    const blocker = new TestActivityError('missing material');
     const blockedOutcome: ActivityRunOutcome<TestActivityError> = {
       error: blocker,
-      event: { characterName: "Stan", goalId: "goal-copper", type: "blocked" },
+      event: { characterName: 'Stan', goalId: 'goal-copper', type: 'blocked' },
     };
-    const plan = vi.fn<RollingActivityPlanner<TestActivityError, TestPlanError>>(
-      (_snapshot, state, previousOutcome) =>
-        previousOutcome === undefined
-          ? ok({ activities: [assignment], state })
-          : unchangedPlan(state),
+    const plan = vi.fn<
+      RollingActivityPlanner<TestActivityError, TestPlanError>
+    >((_snapshot, state, previousOutcome) =>
+      previousOutcome === undefined
+        ? ok({ activities: [assignment], state })
+        : unchangedPlan(state),
     );
     const { completions, startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(
       buildState(),
-      buildSnapshot("2026-07-15T12:00:00.000Z"),
+      buildSnapshot('2026-07-15T12:00:00.000Z'),
       {
         ...noSnapshotRetry,
         plan,
-        refreshSnapshot: () => okAsync(buildSnapshot("2026-07-15T12:01:00.000Z")),
+        refreshSnapshot: () =>
+          okAsync(buildSnapshot('2026-07-15T12:01:00.000Z')),
         reportError: vi.fn(),
         startActivity,
       },
     );
     coordinator.start();
 
-    completions.get("Stan")?.resolve(blockedOutcome);
+    completions.get('Stan')?.resolve(blockedOutcome);
     await coordinator.waitForIdle();
 
     expect(plan.mock.calls[1]?.[2]).toBe(blockedOutcome);
-    expect("error" in (plan.mock.calls[1]?.[2] ?? {})).toBe(true);
+    expect('error' in (plan.mock.calls[1]?.[2] ?? {})).toBe(true);
   });
 
-  it("reports a refresh failure after releasing the finished Reservation", async () => {
-    const assignment = buildAssignment("Stan", "goal-copper");
-    const refreshError = new TestSnapshotError("refresh failed");
+  it('reports a refresh failure after releasing the finished Reservation', async () => {
+    const assignment = buildAssignment('Stan', 'goal-copper');
+    const refreshError = new TestSnapshotError('refresh failed');
     const reportError = vi.fn();
-    const plan = vi.fn<RollingActivityPlanner<TestActivityError, TestPlanError>>(
-      (_snapshot, state) => ok({ activities: [assignment], state }),
-    );
+    const plan = vi.fn<
+      RollingActivityPlanner<TestActivityError, TestPlanError>
+    >((_snapshot, state) => ok({ activities: [assignment], state }));
     const { completions, startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(
       buildState(),
-      buildSnapshot("2026-07-15T12:00:00.000Z"),
+      buildSnapshot('2026-07-15T12:00:00.000Z'),
       {
         ...noSnapshotRetry,
         plan,
@@ -264,7 +299,7 @@ describe("createRollingActivityCoordinator", () => {
     );
     coordinator.start();
 
-    completions.get("Stan")?.resolve(completedOutcome("Stan", "goal-copper"));
+    completions.get('Stan')?.resolve(completedOutcome('Stan', 'goal-copper'));
     await coordinator.waitForIdle();
 
     expect(reportError).toHaveBeenCalledWith(refreshError);
@@ -272,10 +307,10 @@ describe("createRollingActivityCoordinator", () => {
     expect(coordinator.getState().reservations).toEqual([]);
   });
 
-  it("retries a transient snapshot failure before replanning", async () => {
-    const assignment = buildAssignment("Stan", "goal-copper");
-    const refreshError = new TestSnapshotError("refresh failed");
-    const refreshedSnapshot = buildSnapshot("2026-07-15T12:01:00.000Z");
+  it('retries a transient snapshot failure before replanning', async () => {
+    const assignment = buildAssignment('Stan', 'goal-copper');
+    const refreshError = new TestSnapshotError('refresh failed');
+    const refreshedSnapshot = buildSnapshot('2026-07-15T12:01:00.000Z');
     const refreshSnapshot = vi
       .fn<() => ResultAsync<CrewSnapshot, TestSnapshotError>>()
       .mockReturnValueOnce(errAsync(refreshError))
@@ -283,16 +318,17 @@ describe("createRollingActivityCoordinator", () => {
     const reportError = vi.fn();
     const shouldRetrySnapshotFailure = vi.fn(() => true);
     const waitBeforeSnapshotRetry = vi.fn(async () => undefined);
-    const plan = vi.fn<RollingActivityPlanner<TestActivityError, TestPlanError>>(
-      (_snapshot, state, previousOutcome) =>
-        previousOutcome === undefined
-          ? ok({ activities: [assignment], state })
-          : unchangedPlan(state),
+    const plan = vi.fn<
+      RollingActivityPlanner<TestActivityError, TestPlanError>
+    >((_snapshot, state, previousOutcome) =>
+      previousOutcome === undefined
+        ? ok({ activities: [assignment], state })
+        : unchangedPlan(state),
     );
     const { completions, startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(
       buildState(),
-      buildSnapshot("2026-07-15T12:00:00.000Z"),
+      buildSnapshot('2026-07-15T12:00:00.000Z'),
       {
         plan,
         refreshSnapshot,
@@ -304,7 +340,7 @@ describe("createRollingActivityCoordinator", () => {
     );
     coordinator.start();
 
-    completions.get("Stan")?.resolve(completedOutcome("Stan", "goal-copper"));
+    completions.get('Stan')?.resolve(completedOutcome('Stan', 'goal-copper'));
     await coordinator.waitForIdle();
 
     expect(refreshSnapshot).toHaveBeenCalledTimes(2);
@@ -315,21 +351,27 @@ describe("createRollingActivityCoordinator", () => {
     expect(coordinator.getSnapshot()).toBe(refreshedSnapshot);
   });
 
-  it("does not report idle while an Activity is still running", async () => {
-    const assignment = buildAssignment("Stan", "goal-copper");
+  it('does not report idle while an Activity is still running', async () => {
+    const assignment = buildAssignment('Stan', 'goal-copper');
     let planCalls = 0;
-    const plan: RollingActivityPlanner<TestActivityError, TestPlanError> = (_snapshot, state) => {
+    const plan: RollingActivityPlanner<TestActivityError, TestPlanError> = (
+      _snapshot,
+      state,
+    ) => {
       planCalls += 1;
-      return planCalls === 1 ? ok({ activities: [assignment], state }) : unchangedPlan(state);
+      return planCalls === 1
+        ? ok({ activities: [assignment], state })
+        : unchangedPlan(state);
     };
     const { completions, startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(
       buildState(),
-      buildSnapshot("2026-07-15T12:00:00.000Z"),
+      buildSnapshot('2026-07-15T12:00:00.000Z'),
       {
         ...noSnapshotRetry,
         plan,
-        refreshSnapshot: () => okAsync(buildSnapshot("2026-07-15T12:01:00.000Z")),
+        refreshSnapshot: () =>
+          okAsync(buildSnapshot('2026-07-15T12:01:00.000Z')),
         reportError: vi.fn(),
         startActivity,
       },
@@ -345,27 +387,35 @@ describe("createRollingActivityCoordinator", () => {
 
     expect(isIdle).toBe(false);
 
-    completions.get("Stan")?.resolve(completedOutcome("Stan", "goal-copper"));
+    completions.get('Stan')?.resolve(completedOutcome('Stan', 'goal-copper'));
     await idle;
     expect(isIdle).toBe(true);
   });
 
-  it("does not report idle while a terminal event is refreshing the snapshot", async () => {
-    const assignment = buildAssignment("Stan", "goal-copper");
-    const refreshedSnapshot = buildSnapshot("2026-07-15T12:01:00.000Z");
+  it('does not report idle while a terminal event is refreshing the snapshot', async () => {
+    const assignment = buildAssignment('Stan', 'goal-copper');
+    const refreshedSnapshot = buildSnapshot('2026-07-15T12:01:00.000Z');
     const refresh = createDeferred<CrewSnapshot>();
     const refreshSnapshot = vi.fn(() =>
-      ResultAsync.fromPromise(refresh.promise, () => new TestSnapshotError("refresh failed")),
+      ResultAsync.fromPromise(
+        refresh.promise,
+        () => new TestSnapshotError('refresh failed'),
+      ),
     );
     let planCalls = 0;
-    const plan: RollingActivityPlanner<TestActivityError, TestPlanError> = (_snapshot, state) => {
+    const plan: RollingActivityPlanner<TestActivityError, TestPlanError> = (
+      _snapshot,
+      state,
+    ) => {
       planCalls += 1;
-      return planCalls === 1 ? ok({ activities: [assignment], state }) : unchangedPlan(state);
+      return planCalls === 1
+        ? ok({ activities: [assignment], state })
+        : unchangedPlan(state);
     };
     const { completions, startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(
       buildState(),
-      buildSnapshot("2026-07-15T12:00:00.000Z"),
+      buildSnapshot('2026-07-15T12:00:00.000Z'),
       {
         ...noSnapshotRetry,
         plan,
@@ -375,7 +425,7 @@ describe("createRollingActivityCoordinator", () => {
       },
     );
     coordinator.start();
-    completions.get("Stan")?.resolve(completedOutcome("Stan", "goal-copper"));
+    completions.get('Stan')?.resolve(completedOutcome('Stan', 'goal-copper'));
     await vi.waitFor(() => expect(refreshSnapshot).toHaveBeenCalledTimes(1));
     let isIdle = false;
     const idle = coordinator.waitForIdle().then(() => {
@@ -390,44 +440,48 @@ describe("createRollingActivityCoordinator", () => {
     expect(isIdle).toBe(true);
   });
 
-  it("reports a planning failure after processing a terminal outcome", async () => {
-    const assignment = buildAssignment("Stan", "goal-copper");
-    const planError = new TestPlanError("replanning failed");
+  it('reports a planning failure after processing a terminal outcome', async () => {
+    const assignment = buildAssignment('Stan', 'goal-copper');
+    const planError = new TestPlanError('replanning failed');
     const reportError = vi.fn();
     const plan: RollingActivityPlanner<TestActivityError, TestPlanError> = (
       _snapshot,
       state,
       previousOutcome,
-    ) => (previousOutcome === undefined ? ok({ activities: [assignment], state }) : err(planError));
+    ) =>
+      previousOutcome === undefined
+        ? ok({ activities: [assignment], state })
+        : err(planError);
     const { completions, startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(
       buildState(),
-      buildSnapshot("2026-07-15T12:00:00.000Z"),
+      buildSnapshot('2026-07-15T12:00:00.000Z'),
       {
         ...noSnapshotRetry,
         plan,
-        refreshSnapshot: () => okAsync(buildSnapshot("2026-07-15T12:01:00.000Z")),
+        refreshSnapshot: () =>
+          okAsync(buildSnapshot('2026-07-15T12:01:00.000Z')),
         reportError,
         startActivity,
       },
     );
     coordinator.start();
 
-    completions.get("Stan")?.resolve(completedOutcome("Stan", "goal-copper"));
+    completions.get('Stan')?.resolve(completedOutcome('Stan', 'goal-copper'));
     await coordinator.waitForIdle();
 
     expect(reportError).toHaveBeenCalledWith(planError);
     expect(coordinator.getState().reservations).toEqual([]);
   });
 
-  it("reports an unexpected refresh exception without keeping a stale Reservation", async () => {
-    const assignment = buildAssignment("Stan", "goal-copper");
-    const refreshError = new Error("refresh crashed");
+  it('reports an unexpected refresh exception without keeping a stale Reservation', async () => {
+    const assignment = buildAssignment('Stan', 'goal-copper');
+    const refreshError = new Error('refresh crashed');
     const reportError = vi.fn();
     const { completions, startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(
       buildState(),
-      buildSnapshot("2026-07-15T12:00:00.000Z"),
+      buildSnapshot('2026-07-15T12:00:00.000Z'),
       {
         ...noSnapshotRetry,
         plan: (_snapshot, state) => ok({ activities: [assignment], state }),
@@ -440,23 +494,24 @@ describe("createRollingActivityCoordinator", () => {
     );
     coordinator.start();
 
-    completions.get("Stan")?.resolve(completedOutcome("Stan", "goal-copper"));
+    completions.get('Stan')?.resolve(completedOutcome('Stan', 'goal-copper'));
     await coordinator.waitForIdle();
 
     expect(reportError).toHaveBeenCalledWith(refreshError);
     expect(coordinator.getState().reservations).toEqual([]);
   });
 
-  it("returns an initial planning failure without starting work", async () => {
-    const planError = new TestPlanError("planning failed");
+  it('returns an initial planning failure without starting work', async () => {
+    const planError = new TestPlanError('planning failed');
     const { startActivity } = createStarter();
     const coordinator = createRollingActivityCoordinator(
       buildState(),
-      buildSnapshot("2026-07-15T12:00:00.000Z"),
+      buildSnapshot('2026-07-15T12:00:00.000Z'),
       {
         ...noSnapshotRetry,
         plan: () => err(planError),
-        refreshSnapshot: () => okAsync(buildSnapshot("2026-07-15T12:01:00.000Z")),
+        refreshSnapshot: () =>
+          okAsync(buildSnapshot('2026-07-15T12:01:00.000Z')),
         reportError: vi.fn(),
         startActivity,
       },

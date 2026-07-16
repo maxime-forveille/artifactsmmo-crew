@@ -18,14 +18,16 @@ export type RateLimiter = {
  * window fills up, every caller queued behind it wakes up and sends at the
  * exact same instant the window clears - a "thundering herd" release. That's
  * fragile in practice: this limiter records a request as sent the moment it
- * leaves this process, not when the server receives it, so network latency
- * and jitter can spread a locally-synchronized burst unevenly by the time it
- * reaches the server, tipping it over its own window boundary (confirmed
- * live: an un-paced burst of 17 requests produced a synchronized wave of 9
- * at the 1s mark, 6 of which got a real 429 back). Steady pacing avoids
- * ever releasing more than one request at a time.
+ * leaves this process, not when the server receives it, so network latency and
+ * jitter can spread a locally-synchronized burst unevenly by the time it
+ * reaches the server, tipping it over its own window boundary (confirmed live:
+ * an un-paced burst of 17 requests produced a synchronized wave of 9 at the 1s
+ * mark, 6 of which got a real 429 back). Steady pacing avoids ever releasing
+ * more than one request at a time.
  */
-export const createRateLimiter = (windows: readonly RateLimitWindow[]): RateLimiter => {
+export const createRateLimiter = (
+  windows: readonly RateLimitWindow[],
+): RateLimiter => {
   const timestamps: number[] = [];
   const shortestWindow = windows.reduce((shortest, window) =>
     window.windowMs < shortest.windowMs ? window : shortest,
@@ -36,7 +38,9 @@ export const createRateLimiter = (windows: readonly RateLimitWindow[]): RateLimi
   const msUntilWindowAllows = (now: number): number =>
     windows.reduce((waitMs, window) => {
       const windowStart = now - window.windowMs;
-      const inWindow = timestamps.filter((timestamp) => timestamp > windowStart);
+      const inWindow = timestamps.filter(
+        (timestamp) => timestamp > windowStart,
+      );
 
       if (inWindow.length < window.limit) {
         return waitMs;

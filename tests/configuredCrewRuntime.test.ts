@@ -1,28 +1,31 @@
-import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { errAsync, okAsync } from 'neverthrow';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   createConfiguredCrewRuntime,
   resolveConfiguredItems,
   resolveConfiguredResources,
   resolveEquipmentMaterials,
-} from "../src/bot/runtime/configuredCrewRuntime.js";
-import { ArtifactsApiError, type ArtifactsClient } from "../src/client/index.js";
-import type { components } from "../src/client/schema.js";
-import type { OrchestrationConfig } from "../src/utils/orchestrationConfig.js";
+} from '../src/bot/runtime/configuredCrewRuntime.js';
+import {
+  ArtifactsApiError,
+  type ArtifactsClient,
+} from '../src/client/index.js';
+import type { components } from '../src/client/schema.js';
+import type { OrchestrationConfig } from '../src/utils/orchestrationConfig.js';
 
-type BankPage = components["schemas"]["DataPage_SimpleItemSchema_"];
-type Character = components["schemas"]["CharacterSchema"];
-type Item = components["schemas"]["ItemSchema"];
-type Monster = components["schemas"]["MonsterSchema"];
-type Resource = components["schemas"]["ResourceSchema"];
+type BankPage = components['schemas']['DataPage_SimpleItemSchema_'];
+type Character = components['schemas']['CharacterSchema'];
+type Item = components['schemas']['ItemSchema'];
+type Monster = components['schemas']['MonsterSchema'];
+type Resource = components['schemas']['ResourceSchema'];
 
 const buildCharacter = (): Character => ({
   ...({} as Character),
   inventory: [],
   level: 5,
-  name: "Stan",
-  weapon_slot: "copper_dagger",
+  name: 'Stan',
+  weapon_slot: 'copper_dagger',
 });
 
 const buildItem = (code: string): Item => ({
@@ -30,7 +33,7 @@ const buildItem = (code: string): Item => ({
   code,
   level: 1,
   name: code,
-  type: "weapon",
+  type: 'weapon',
 });
 
 const buildMonster = (code: string, itemCode: string): Monster => ({
@@ -44,10 +47,12 @@ const buildMonster = (code: string, itemCode: string): Monster => ({
 const buildResource = (code: string, itemCode?: string): Resource => ({
   code,
   drops:
-    itemCode === undefined ? [] : [{ code: itemCode, max_quantity: 1, min_quantity: 1, rate: 1 }],
+    itemCode === undefined
+      ? []
+      : [{ code: itemCode, max_quantity: 1, min_quantity: 1, rate: 1 }],
   level: 1,
   name: code,
-  skill: "mining",
+  skill: 'mining',
 });
 
 const buildPage = <T>(data: T[]) => ({
@@ -61,18 +66,18 @@ const buildPage = <T>(data: T[]) => ({
 const buildConfig = (): OrchestrationConfig => ({
   goals: [
     {
-      id: "goal-copper",
-      itemCode: "copper_ore",
+      id: 'goal-copper',
+      itemCode: 'copper_ore',
       minimumBankQuantity: 50,
-      resourceCode: "copper_rocks",
-      type: "replenishBankItem",
+      resourceCode: 'copper_rocks',
+      type: 'replenishBankItem',
     },
     {
-      id: "goal-ash",
-      itemCode: "ash_wood",
+      id: 'goal-ash',
+      itemCode: 'ash_wood',
       minimumBankQuantity: 25,
-      resourceCode: "ash_tree",
-      type: "replenishBankItem",
+      resourceCode: 'ash_tree',
+      type: 'replenishBankItem',
     },
   ],
 });
@@ -80,18 +85,18 @@ const buildConfig = (): OrchestrationConfig => ({
 const buildEquipmentConfig = (): OrchestrationConfig => ({
   goals: [
     {
-      characterName: "Stan",
-      id: "equip-stan-dagger",
-      itemCode: "copper_dagger",
-      type: "equipItem",
+      characterName: 'Stan',
+      id: 'equip-stan-dagger',
+      itemCode: 'copper_dagger',
+      type: 'equipItem',
     },
   ],
 });
 
 const buildBankPage = (): BankPage => ({
   data: [
-    { code: "ash_wood", quantity: 25 },
-    { code: "copper_ore", quantity: 50 },
+    { code: 'ash_wood', quantity: 25 },
+    { code: 'copper_ore', quantity: 50 },
   ],
   page: 1,
   pages: 1,
@@ -99,32 +104,32 @@ const buildBankPage = (): BankPage => ({
   total: 2,
 });
 
-describe("resolveConfiguredItems", () => {
-  it("resolves equipment targets while preserving Goal ids", async () => {
+describe('resolveConfiguredItems', () => {
+  it('resolves equipment targets while preserving Goal ids', async () => {
     const getItem = vi.fn((code: string) => okAsync({ data: buildItem(code) }));
-    const client = { getItem } as Pick<ArtifactsClient, "getItem">;
+    const client = { getItem } as Pick<ArtifactsClient, 'getItem'>;
 
     const result = await resolveConfiguredItems(client, buildEquipmentConfig());
 
     expect(result.isOk() && result.value).toEqual([
-      { goalId: "equip-stan-dagger", item: buildItem("copper_dagger") },
+      { goalId: 'equip-stan-dagger', item: buildItem('copper_dagger') },
     ]);
-    expect(getItem).toHaveBeenCalledWith("copper_dagger");
+    expect(getItem).toHaveBeenCalledWith('copper_dagger');
   });
 
-  it("propagates an item catalog failure", async () => {
-    const apiError = new ArtifactsApiError("unavailable", 503, {});
+  it('propagates an item catalog failure', async () => {
+    const apiError = new ArtifactsApiError('unavailable', 503, {});
     const getItem = vi.fn(() => errAsync(apiError));
-    const client = { getItem } as Pick<ArtifactsClient, "getItem">;
+    const client = { getItem } as Pick<ArtifactsClient, 'getItem'>;
 
     const result = await resolveConfiguredItems(client, buildEquipmentConfig());
 
     expect(result.isErr() && result.error).toBe(apiError);
   });
 
-  it("does not query items for resource Goals", async () => {
+  it('does not query items for resource Goals', async () => {
     const getItem = vi.fn();
-    const client = { getItem } as unknown as Pick<ArtifactsClient, "getItem">;
+    const client = { getItem } as unknown as Pick<ArtifactsClient, 'getItem'>;
 
     const result = await resolveConfiguredItems(client, buildConfig());
 
@@ -133,115 +138,122 @@ describe("resolveConfiguredItems", () => {
   });
 });
 
-describe("resolveEquipmentMaterials", () => {
+describe('resolveEquipmentMaterials', () => {
   const buildResolvedItem = (materialCodes: readonly string[]) => ({
-    goalId: "equip-stan-dagger",
+    goalId: 'equip-stan-dagger',
     item: {
-      ...buildItem("copper_dagger"),
+      ...buildItem('copper_dagger'),
       craft: {
         items: materialCodes.map((code) => ({ code, quantity: 1 })),
         level: 1,
         quantity: 1,
-        skill: "weaponcrafting" as const,
+        skill: 'weaponcrafting' as const,
       },
     },
   });
 
-  it("resolves a direct material with one gather source", async () => {
-    const material = buildItem("copper_ore");
-    const resource = buildResource("copper_rocks", "copper_ore");
+  it('resolves a direct material with one gather source', async () => {
+    const material = buildItem('copper_ore');
+    const resource = buildResource('copper_rocks', 'copper_ore');
     const getItem = vi.fn(() => okAsync({ data: material }));
     const getMonsters = vi.fn(() => okAsync(buildPage([])));
     const getResources = vi.fn(() => okAsync(buildPage([resource])));
 
-    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
-      buildResolvedItem(["copper_ore"]),
-    ]);
+    const result = await resolveEquipmentMaterials(
+      { getItem, getMonsters, getResources },
+      [buildResolvedItem(['copper_ore'])],
+    );
 
     expect(result._unsafeUnwrap()).toEqual({
-      items: [{ goalId: "equip-stan-dagger", item: material }],
+      items: [{ goalId: 'equip-stan-dagger', item: material }],
       sources: [
         {
-          goalId: "equip-stan-dagger",
+          goalId: 'equip-stan-dagger',
           materialSource: {
-            itemCode: "copper_ore",
-            source: { resource, type: "gather" },
+            itemCode: 'copper_ore',
+            source: { resource, type: 'gather' },
           },
         },
       ],
     });
-    expect(getMonsters).toHaveBeenCalledWith({ drop: "copper_ore", size: 100 });
-    expect(getResources).toHaveBeenCalledWith({ drop: "copper_ore", size: 100 });
+    expect(getMonsters).toHaveBeenCalledWith({ drop: 'copper_ore', size: 100 });
+    expect(getResources).toHaveBeenCalledWith({
+      drop: 'copper_ore',
+      size: 100,
+    });
   });
 
-  it("resolves a direct material with one monster source", async () => {
-    const material = buildItem("yellow_slimeball");
-    const monster = buildMonster("yellow_slime", "yellow_slimeball");
+  it('resolves a direct material with one monster source', async () => {
+    const material = buildItem('yellow_slimeball');
+    const monster = buildMonster('yellow_slime', 'yellow_slimeball');
     const getItem = vi.fn(() => okAsync({ data: material }));
     const getMonsters = vi.fn(() => okAsync(buildPage([monster])));
     const getResources = vi.fn(() => okAsync(buildPage([])));
 
-    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
-      buildResolvedItem(["yellow_slimeball"]),
-    ]);
+    const result = await resolveEquipmentMaterials(
+      { getItem, getMonsters, getResources },
+      [buildResolvedItem(['yellow_slimeball'])],
+    );
 
     expect(result._unsafeUnwrap()).toEqual({
-      items: [{ goalId: "equip-stan-dagger", item: material }],
+      items: [{ goalId: 'equip-stan-dagger', item: material }],
       sources: [
         {
-          goalId: "equip-stan-dagger",
+          goalId: 'equip-stan-dagger',
           materialSource: {
-            itemCode: "yellow_slimeball",
-            source: { monster, type: "hunt" },
+            itemCode: 'yellow_slimeball',
+            source: { monster, type: 'hunt' },
           },
         },
       ],
     });
   });
 
-  it("leaves a material source unresolved when no catalog source exists", async () => {
-    const material = buildItem("unknown_material");
+  it('leaves a material source unresolved when no catalog source exists', async () => {
+    const material = buildItem('unknown_material');
     const getItem = vi.fn(() => okAsync({ data: material }));
     const getMonsters = vi.fn(() => okAsync(buildPage([])));
     const getResources = vi.fn(() => okAsync(buildPage([])));
 
-    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
-      buildResolvedItem(["unknown_material"]),
-    ]);
+    const result = await resolveEquipmentMaterials(
+      { getItem, getMonsters, getResources },
+      [buildResolvedItem(['unknown_material'])],
+    );
 
     expect(result._unsafeUnwrap()).toEqual({
-      items: [{ goalId: "equip-stan-dagger", item: material }],
+      items: [{ goalId: 'equip-stan-dagger', item: material }],
       sources: [],
     });
   });
 
-  it("does not choose between gather and hunt when both can produce the material", async () => {
-    const material = buildItem("slime_residue");
+  it('does not choose between gather and hunt when both can produce the material', async () => {
+    const material = buildItem('slime_residue');
     const getItem = vi.fn(() => okAsync({ data: material }));
     const getMonsters = vi.fn(() =>
-      okAsync(buildPage([buildMonster("yellow_slime", "slime_residue")])),
+      okAsync(buildPage([buildMonster('yellow_slime', 'slime_residue')])),
     );
     const getResources = vi.fn(() =>
-      okAsync(buildPage([buildResource("slime_pool", "slime_residue")])),
+      okAsync(buildPage([buildResource('slime_pool', 'slime_residue')])),
     );
 
-    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
-      buildResolvedItem(["slime_residue"]),
-    ]);
+    const result = await resolveEquipmentMaterials(
+      { getItem, getMonsters, getResources },
+      [buildResolvedItem(['slime_residue'])],
+    );
 
     expect(result._unsafeUnwrap()).toEqual({
-      items: [{ goalId: "equip-stan-dagger", item: material }],
+      items: [{ goalId: 'equip-stan-dagger', item: material }],
       sources: [],
     });
   });
 
-  it("queries a repeated direct material only once per Goal", async () => {
-    const getItem = vi.fn(() => okAsync({ data: buildItem("copper_ore") }));
+  it('queries a repeated direct material only once per Goal', async () => {
+    const getItem = vi.fn(() => okAsync({ data: buildItem('copper_ore') }));
     const getMonsters = vi.fn(() => okAsync(buildPage([])));
     const getResources = vi.fn(() => okAsync(buildPage([])));
 
     await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
-      buildResolvedItem(["copper_ore", "copper_ore"]),
+      buildResolvedItem(['copper_ore', 'copper_ore']),
     ]);
 
     expect(getItem).toHaveBeenCalledOnce();
@@ -249,39 +261,40 @@ describe("resolveEquipmentMaterials", () => {
     expect(getResources).toHaveBeenCalledOnce();
   });
 
-  it("recursively resolves craftable intermediates down to a raw source", async () => {
-    const copperOre = buildItem("copper_ore");
+  it('recursively resolves craftable intermediates down to a raw source', async () => {
+    const copperOre = buildItem('copper_ore');
     const copperBar = {
-      ...buildItem("copper_bar"),
+      ...buildItem('copper_bar'),
       craft: {
-        items: [{ code: "copper_ore", quantity: 3 }],
+        items: [{ code: 'copper_ore', quantity: 3 }],
         level: 1,
         quantity: 1,
-        skill: "weaponcrafting" as const,
+        skill: 'weaponcrafting' as const,
       },
     };
-    const resource = buildResource("copper_rocks", "copper_ore");
+    const resource = buildResource('copper_rocks', 'copper_ore');
     const getItem = vi.fn((code: string) =>
-      okAsync({ data: code === "copper_bar" ? copperBar : copperOre }),
+      okAsync({ data: code === 'copper_bar' ? copperBar : copperOre }),
     );
     const getMonsters = vi.fn(() => okAsync(buildPage([])));
     const getResources = vi.fn(() => okAsync(buildPage([resource])));
 
-    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
-      buildResolvedItem(["copper_bar"]),
-    ]);
+    const result = await resolveEquipmentMaterials(
+      { getItem, getMonsters, getResources },
+      [buildResolvedItem(['copper_bar'])],
+    );
 
     expect(result._unsafeUnwrap()).toEqual({
       items: [
-        { goalId: "equip-stan-dagger", item: copperBar },
-        { goalId: "equip-stan-dagger", item: copperOre },
+        { goalId: 'equip-stan-dagger', item: copperBar },
+        { goalId: 'equip-stan-dagger', item: copperOre },
       ],
       sources: [
         {
-          goalId: "equip-stan-dagger",
+          goalId: 'equip-stan-dagger',
           materialSource: {
-            itemCode: "copper_ore",
-            source: { resource, type: "gather" },
+            itemCode: 'copper_ore',
+            source: { resource, type: 'gather' },
           },
         },
       ],
@@ -290,14 +303,14 @@ describe("resolveEquipmentMaterials", () => {
     expect(getResources).toHaveBeenCalledOnce();
   });
 
-  it("stops descending when a material recipe points back to an ancestor", async () => {
+  it('stops descending when a material recipe points back to an ancestor', async () => {
     const copperBar = {
-      ...buildItem("copper_bar"),
+      ...buildItem('copper_bar'),
       craft: {
-        items: [{ code: "copper_dagger", quantity: 1 }],
+        items: [{ code: 'copper_dagger', quantity: 1 }],
         level: 1,
         quantity: 1,
-        skill: "weaponcrafting" as const,
+        skill: 'weaponcrafting' as const,
       },
     };
     const getItem = vi.fn(() => okAsync({ data: copperBar }));
@@ -307,13 +320,13 @@ describe("resolveEquipmentMaterials", () => {
     const result = await resolveEquipmentMaterials(
       { getItem, getMonsters, getResources } as unknown as Pick<
         ArtifactsClient,
-        "getItem" | "getMonsters" | "getResources"
+        'getItem' | 'getMonsters' | 'getResources'
       >,
-      [buildResolvedItem(["copper_bar"])],
+      [buildResolvedItem(['copper_bar'])],
     );
 
     expect(result._unsafeUnwrap()).toEqual({
-      items: [{ goalId: "equip-stan-dagger", item: copperBar }],
+      items: [{ goalId: 'equip-stan-dagger', item: copperBar }],
       sources: [],
     });
     expect(getItem).toHaveBeenCalledOnce();
@@ -321,50 +334,58 @@ describe("resolveEquipmentMaterials", () => {
     expect(getResources).not.toHaveBeenCalled();
   });
 
-  it("propagates a material catalog failure", async () => {
-    const apiError = new ArtifactsApiError("unavailable", 503, {});
-    const getItem = vi.fn(() => okAsync({ data: buildItem("copper_ore") }));
+  it('propagates a material catalog failure', async () => {
+    const apiError = new ArtifactsApiError('unavailable', 503, {});
+    const getItem = vi.fn(() => okAsync({ data: buildItem('copper_ore') }));
     const getMonsters = vi.fn(() => errAsync(apiError));
     const getResources = vi.fn(() => okAsync(buildPage([])));
 
-    const result = await resolveEquipmentMaterials({ getItem, getMonsters, getResources }, [
-      buildResolvedItem(["copper_ore"]),
-    ]);
+    const result = await resolveEquipmentMaterials(
+      { getItem, getMonsters, getResources },
+      [buildResolvedItem(['copper_ore'])],
+    );
 
     expect(result.isErr() && result.error).toBe(apiError);
   });
 });
 
-describe("resolveConfiguredResources", () => {
-  it("resolves every configured resource while preserving Goal ids", async () => {
-    const getResource = vi.fn((code: string) => okAsync({ data: buildResource(code) }));
-    const client = { getResource } as Pick<ArtifactsClient, "getResource">;
+describe('resolveConfiguredResources', () => {
+  it('resolves every configured resource while preserving Goal ids', async () => {
+    const getResource = vi.fn((code: string) =>
+      okAsync({ data: buildResource(code) }),
+    );
+    const client = { getResource } as Pick<ArtifactsClient, 'getResource'>;
 
     const result = await resolveConfiguredResources(client, buildConfig());
 
     expect(result.isOk() && result.value).toEqual([
-      { goalId: "goal-copper", resource: buildResource("copper_rocks") },
-      { goalId: "goal-ash", resource: buildResource("ash_tree") },
+      { goalId: 'goal-copper', resource: buildResource('copper_rocks') },
+      { goalId: 'goal-ash', resource: buildResource('ash_tree') },
     ]);
-    expect(getResource).toHaveBeenNthCalledWith(1, "copper_rocks");
-    expect(getResource).toHaveBeenNthCalledWith(2, "ash_tree");
+    expect(getResource).toHaveBeenNthCalledWith(1, 'copper_rocks');
+    expect(getResource).toHaveBeenNthCalledWith(2, 'ash_tree');
   });
 
-  it("propagates a catalog failure instead of building a partial mapping", async () => {
-    const apiError = new ArtifactsApiError("unavailable", 503, {});
+  it('propagates a catalog failure instead of building a partial mapping', async () => {
+    const apiError = new ArtifactsApiError('unavailable', 503, {});
     const getResource = vi.fn((code: string) =>
-      code === "ash_tree" ? errAsync(apiError) : okAsync({ data: buildResource(code) }),
+      code === 'ash_tree'
+        ? errAsync(apiError)
+        : okAsync({ data: buildResource(code) }),
     );
-    const client = { getResource } as Pick<ArtifactsClient, "getResource">;
+    const client = { getResource } as Pick<ArtifactsClient, 'getResource'>;
 
     const result = await resolveConfiguredResources(client, buildConfig());
 
     expect(result.isErr() && result.error).toBe(apiError);
   });
 
-  it("does not query the catalog when no Goals are configured", async () => {
+  it('does not query the catalog when no Goals are configured', async () => {
     const getResource = vi.fn();
-    const client = { getResource } as unknown as Pick<ArtifactsClient, "getResource">;
+    const client = { getResource } as unknown as Pick<
+      ArtifactsClient,
+      'getResource'
+    >;
 
     const result = await resolveConfiguredResources(client, { goals: [] });
 
@@ -373,9 +394,11 @@ describe("resolveConfiguredResources", () => {
   });
 });
 
-describe("createConfiguredCrewRuntime", () => {
-  it("completes an already-equipped configured Goal without starting an Action", async () => {
-    const getBankItems = vi.fn(() => okAsync({ ...buildBankPage(), data: [], total: 0 }));
+describe('createConfiguredCrewRuntime', () => {
+  it('completes an already-equipped configured Goal without starting an Action', async () => {
+    const getBankItems = vi.fn(() =>
+      okAsync({ ...buildBankPage(), data: [], total: 0 }),
+    );
     const getItem = vi.fn((code: string) => okAsync({ data: buildItem(code) }));
     const getMyCharacters = vi.fn(() => okAsync({ data: [buildCharacter()] }));
     const client = {
@@ -393,13 +416,15 @@ describe("createConfiguredCrewRuntime", () => {
 
     expect(runtime.start().isOk()).toBe(true);
     expect(runtime.getState()).toEqual({ goals: [], reservations: [] });
-    expect(getItem).toHaveBeenCalledWith("copper_dagger");
+    expect(getItem).toHaveBeenCalledWith('copper_dagger');
     expect(getMyCharacters).toHaveBeenCalledOnce();
     expect(getBankItems).toHaveBeenCalledOnce();
   });
 
-  it("builds a runtime from resolved resources and validated Goals", async () => {
-    const getResource = vi.fn((code: string) => okAsync({ data: buildResource(code) }));
+  it('builds a runtime from resolved resources and validated Goals', async () => {
+    const getResource = vi.fn((code: string) =>
+      okAsync({ data: buildResource(code) }),
+    );
     const getBankItems = vi.fn(() => okAsync(buildBankPage()));
     const getMyCharacters = vi.fn(() => okAsync({ data: [] }));
     const client = {

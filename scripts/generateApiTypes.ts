@@ -1,8 +1,8 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync } from 'node:child_process';
 
-import { OPENAPI_SCHEMA_URL } from "../src/client/constants.js";
+import { OPENAPI_SCHEMA_URL } from '../src/client/constants.js';
 
-const OUTPUT_PATH = "src/client/schema.d.ts";
+const OUTPUT_PATH = 'src/client/schema.d.ts';
 
 // openapi-typescript is run via `pnpm dlx` (isolated, temporary environment)
 // rather than installed as a devDependency: it relies on the classic
@@ -13,9 +13,11 @@ const OUTPUT_PATH = "src/client/schema.d.ts";
 const generateApiTypes = () => {
   console.log(`Generating ${OUTPUT_PATH} from ${OPENAPI_SCHEMA_URL} ...`);
 
-  execFileSync("pnpm", ["dlx", "openapi-typescript@7", OPENAPI_SCHEMA_URL, "-o", OUTPUT_PATH], {
-    stdio: "inherit",
-  });
+  execFileSync(
+    'pnpm',
+    ['dlx', 'openapi-typescript@7', OPENAPI_SCHEMA_URL, '-o', OUTPUT_PATH],
+    { stdio: 'inherit' },
+  );
 };
 
 generateApiTypes();

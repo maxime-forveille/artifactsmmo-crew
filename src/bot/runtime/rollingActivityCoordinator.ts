@@ -1,20 +1,27 @@
-import { err, ResultAsync, type Result } from "neverthrow";
+import { err, ResultAsync, type Result } from 'neverthrow';
 
-import { createActivityEventProcessor } from "./activityEventProcessor.js";
-import type { ActivityRunOutcome, LaunchedActivity } from "./activityLauncher.js";
+import type {
+  FinishActivityError,
+  StartActivityError,
+} from '../orchestration/activityLifecycle.js';
+import type { CrewSnapshot } from '../orchestration/crewSnapshot.js';
+import type { OrchestratorState } from '../orchestration/orchestratorState.js';
+
+import { createActivityEventProcessor } from './activityEventProcessor.js';
+import type {
+  ActivityRunOutcome,
+  LaunchedActivity,
+} from './activityLauncher.js';
 import {
   scheduleActivities,
   type ActivityPlan,
   type ActivityStarter,
-} from "./activityScheduler.js";
-import type {
-  FinishActivityError,
-  StartActivityError,
-} from "../orchestration/activityLifecycle.js";
-import type { CrewSnapshot } from "../orchestration/crewSnapshot.js";
-import type { OrchestratorState } from "../orchestration/orchestratorState.js";
+} from './activityScheduler.js';
 
-export type RollingActivityPlanner<EActivity extends Error, EPlan extends Error> = (
+export type RollingActivityPlanner<
+  EActivity extends Error,
+  EPlan extends Error,
+> = (
   snapshot: CrewSnapshot,
   state: OrchestratorState,
   previousOutcome?: ActivityRunOutcome<EActivity>,
@@ -40,7 +47,10 @@ type RollingActivityCoordinatorDependencies<
   waitBeforeSnapshotRetry: () => Promise<void>;
 }>;
 
-export type RollingActivityCoordinator<EPlan extends Error, EStart extends Error> = Readonly<{
+export type RollingActivityCoordinator<
+  EPlan extends Error,
+  EStart extends Error,
+> = Readonly<{
   getSnapshot: () => CrewSnapshot;
   getState: () => OrchestratorState;
   start: () => Result<void, EPlan | EStart | StartActivityError>;
@@ -50,7 +60,8 @@ export type RollingActivityCoordinator<EPlan extends Error, EStart extends Error
 /**
  * Connects planning, launching, terminal-event processing, and snapshot refresh
  * in one rolling queue. Existing Activities continue concurrently, while every
- * terminal event is applied and replanned sequentially against the latest state.
+ * terminal event is applied and replanned sequentially against the latest
+ * state.
  */
 export const createRollingActivityCoordinator = <
   EActivity extends Error,
@@ -60,7 +71,12 @@ export const createRollingActivityCoordinator = <
 >(
   initialState: OrchestratorState,
   initialSnapshot: CrewSnapshot,
-  dependencies: RollingActivityCoordinatorDependencies<EActivity, EPlan, ESnapshot, EStart>,
+  dependencies: RollingActivityCoordinatorDependencies<
+    EActivity,
+    EPlan,
+    ESnapshot,
+    EStart
+  >,
 ): RollingActivityCoordinator<EPlan, EStart> => {
   let pendingEvents = 0;
   let queue: Promise<void> = Promise.resolve();
@@ -78,7 +94,10 @@ export const createRollingActivityCoordinator = <
         for (;;) {
           const refreshed = await dependencies.refreshSnapshot();
 
-          if (refreshed.isOk() || !dependencies.shouldRetrySnapshotFailure(refreshed.error)) {
+          if (
+            refreshed.isOk() ||
+            !dependencies.shouldRetrySnapshotFailure(refreshed.error)
+          ) {
             return refreshed;
           }
 
@@ -151,7 +170,9 @@ export const createRollingActivityCoordinator = <
     return scheduled.map(() => undefined);
   };
 
-  const processOutcome = async (outcome: ActivityRunOutcome<EActivity>): Promise<void> => {
+  const processOutcome = async (
+    outcome: ActivityRunOutcome<EActivity>,
+  ): Promise<void> => {
     const processor = createActivityEventProcessor<EActivity, ESnapshot>(
       state,
       snapshot,

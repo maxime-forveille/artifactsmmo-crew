@@ -1,25 +1,25 @@
-import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { errAsync, okAsync } from 'neverthrow';
+import { describe, expect, it, vi } from 'vitest';
 
-import { runFarmingCycle } from "../src/bot/activities/farming.js";
-import { LocationNotFoundError } from "../src/bot/world.js";
-import { ArtifactsApiError } from "../src/client/index.js";
-import type { components } from "../src/client/schema.js";
+import { runFarmingCycle } from '../src/bot/activities/farming.js';
+import { LocationNotFoundError } from '../src/bot/world.js';
+import { ArtifactsApiError } from '../src/client/index.js';
+import type { components } from '../src/client/schema.js';
 
-type CharacterSnapshot = components["schemas"]["CharacterSchema"];
-type Map = components["schemas"]["MapSchema"];
-type MapPage = components["schemas"]["StaticDataPage_MapSchema_"];
-type Cooldown = components["schemas"]["CooldownSchema"];
+type CharacterSnapshot = components['schemas']['CharacterSchema'];
+type Map = components['schemas']['MapSchema'];
+type MapPage = components['schemas']['StaticDataPage_MapSchema_'];
+type Cooldown = components['schemas']['CooldownSchema'];
 type MapQuery = { content_code?: string; content_type?: string };
 
 const RESOURCE_MAP_ID = 277;
 const BANK_MAP_ID = 334;
 
 const buildCooldown = (): Cooldown => ({
-  expiration: "2024-01-01T00:00:05.000Z",
-  reason: "gathering",
+  expiration: '2024-01-01T00:00:05.000Z',
+  reason: 'gathering',
   remaining_seconds: 5,
-  started_at: "2024-01-01T00:00:00.000Z",
+  started_at: '2024-01-01T00:00:00.000Z',
   total_seconds: 5,
 });
 
@@ -36,20 +36,26 @@ const buildPage = (data: Map[]): MapPage => ({
 // Resolves to RESOURCE_MAP_ID or BANK_MAP_ID depending on the requested content type.
 const buildGetMaps = () =>
   vi.fn((query: MapQuery = {}) =>
-    okAsync(buildPage([buildMap(query.content_type === "bank" ? BANK_MAP_ID : RESOURCE_MAP_ID)])),
+    okAsync(
+      buildPage([
+        buildMap(query.content_type === 'bank' ? BANK_MAP_ID : RESOURCE_MAP_ID),
+      ]),
+    ),
   );
 
-const buildCharacter = (overrides: Partial<CharacterSnapshot> = {}): CharacterSnapshot => ({
+const buildCharacter = (
+  overrides: Partial<CharacterSnapshot> = {},
+): CharacterSnapshot => ({
   ...({} as CharacterSnapshot),
   inventory: [],
   inventory_max_items: 20,
   map_id: 1,
-  name: "Cartman",
+  name: 'Cartman',
   ...overrides,
 });
 
-describe("runFarmingCycle", () => {
-  it("moves to the resource, gathers until full, then moves to the bank and deposits everything", async () => {
+describe('runFarmingCycle', () => {
+  it('moves to the resource, gathers until full, then moves to the bank and deposits everything', async () => {
     const getMaps = buildGetMaps();
     let character = buildCharacter({ inventory_max_items: 20 });
     const getCharacter = vi.fn(() => character);
@@ -58,22 +64,33 @@ describe("runFarmingCycle", () => {
       const heldQuantity = character.inventory?.[0]?.quantity ?? 0;
       character = {
         ...character,
-        inventory: [{ code: "copper_ore", quantity: heldQuantity + 10, slot: 1 }],
+        inventory: [
+          { code: 'copper_ore', quantity: heldQuantity + 10, slot: 1 },
+        ],
       };
-      return okAsync({ character, cooldown: buildCooldown(), details: { items: [], xp: 5 } });
+      return okAsync({
+        character,
+        cooldown: buildCooldown(),
+        details: { items: [], xp: 5 },
+      });
     });
 
     const moveTo = vi.fn(() => okAsync(undefined));
 
     const depositItems = vi.fn(() => {
       character = { ...character, inventory: [] };
-      return okAsync({ bank: [], character, cooldown: buildCooldown(), items: [] });
+      return okAsync({
+        bank: [],
+        character,
+        cooldown: buildCooldown(),
+        items: [],
+      });
     });
 
     const result = await runFarmingCycle(
       { getMaps },
       { depositItems, gather, getCharacter, moveTo },
-      "copper_rocks",
+      'copper_rocks',
     );
 
     expect(result.isOk()).toBe(true);
@@ -81,13 +98,15 @@ describe("runFarmingCycle", () => {
     expect(moveTo).toHaveBeenNthCalledWith(2, BANK_MAP_ID);
     // Inventory goes 0 -> 10 -> 20 (full, cap reached exactly on the 2nd gather).
     expect(gather).toHaveBeenCalledTimes(2);
-    expect(depositItems).toHaveBeenCalledWith([{ code: "copper_ore", quantity: 20 }]);
+    expect(depositItems).toHaveBeenCalledWith([
+      { code: 'copper_ore', quantity: 20 },
+    ]);
   });
 
-  it("skips gathering entirely when the inventory starts already full", async () => {
+  it('skips gathering entirely when the inventory starts already full', async () => {
     const getMaps = buildGetMaps();
     const character = buildCharacter({
-      inventory: [{ code: "copper_ore", quantity: 20, slot: 1 }],
+      inventory: [{ code: 'copper_ore', quantity: 20, slot: 1 }],
       inventory_max_items: 20,
     });
     const getCharacter = vi.fn(() => character);
@@ -100,12 +119,14 @@ describe("runFarmingCycle", () => {
     const result = await runFarmingCycle(
       { getMaps },
       { depositItems, gather, getCharacter, moveTo },
-      "copper_rocks",
+      'copper_rocks',
     );
 
     expect(result.isOk()).toBe(true);
     expect(gather).not.toHaveBeenCalled();
-    expect(depositItems).toHaveBeenCalledWith([{ code: "copper_ore", quantity: 20 }]);
+    expect(depositItems).toHaveBeenCalledWith([
+      { code: 'copper_ore', quantity: 20 },
+    ]);
   });
 
   it("propagates a LocationNotFoundError when the resource can't be resolved, without moving", async () => {
@@ -118,7 +139,7 @@ describe("runFarmingCycle", () => {
     const result = await runFarmingCycle(
       { getMaps },
       { depositItems, gather, getCharacter, moveTo },
-      "unknown_resource",
+      'unknown_resource',
     );
 
     expect(result.isErr()).toBe(true);
@@ -126,11 +147,11 @@ describe("runFarmingCycle", () => {
     expect(moveTo).not.toHaveBeenCalled();
   });
 
-  it("propagates a gather failure and does not proceed to the bank", async () => {
+  it('propagates a gather failure and does not proceed to the bank', async () => {
     const getMaps = buildGetMaps();
     const character = buildCharacter({ inventory_max_items: 20 });
     const getCharacter = vi.fn(() => character);
-    const apiError = new ArtifactsApiError("inventory full", 497, undefined);
+    const apiError = new ArtifactsApiError('inventory full', 497, undefined);
     const gather = vi.fn(() => errAsync(apiError));
     const moveTo = vi.fn(() => okAsync(undefined));
     const depositItems = vi.fn();
@@ -138,7 +159,7 @@ describe("runFarmingCycle", () => {
     const result = await runFarmingCycle(
       { getMaps },
       { depositItems, gather, getCharacter, moveTo },
-      "copper_rocks",
+      'copper_rocks',
     );
 
     expect(result.isErr()).toBe(true);

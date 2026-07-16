@@ -125,11 +125,11 @@ than assuming every assignment runs forever.
 
 ```ts
 type Activity =
-  | { type: "farmResource"; resourceCode: string }
-  | { type: "huntMonster"; monsterCode: string }
-  | { type: "craftItem"; itemCode: string; quantity: number }
-  | { type: "equipItem"; itemCode: string }
-  | { type: "withdrawItem"; itemCode: string; quantity: number };
+  | { type: 'farmResource'; resourceCode: string }
+  | { type: 'huntMonster'; monsterCode: string }
+  | { type: 'craftItem'; itemCode: string; quantity: number }
+  | { type: 'equipItem'; itemCode: string }
+  | { type: 'withdrawItem'; itemCode: string; quantity: number };
 ```
 
 Activities are complete operational cycles, not individual game Actions:

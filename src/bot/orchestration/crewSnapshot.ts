@@ -1,11 +1,14 @@
-import { okAsync, ResultAsync } from "neverthrow";
+import { okAsync, ResultAsync } from 'neverthrow';
 
-import type { ArtifactsApiError, ArtifactsClient } from "../../client/index.js";
-import type { components } from "../../client/schema.js";
+import type { ArtifactsApiError, ArtifactsClient } from '../../client/index.js';
+import type { components } from '../../client/schema.js';
 
-type BankItem = Readonly<components["schemas"]["SimpleItemSchema"]>;
-type Character = Readonly<components["schemas"]["CharacterSchema"]>;
-type CrewSnapshotClient = Pick<ArtifactsClient, "getBankItems" | "getMyCharacters">;
+type BankItem = Readonly<components['schemas']['SimpleItemSchema']>;
+type Character = Readonly<components['schemas']['CharacterSchema']>;
+type CrewSnapshotClient = Pick<
+  ArtifactsClient,
+  'getBankItems' | 'getMyCharacters'
+>;
 type Now = () => Date;
 
 export type CrewSnapshot = Readonly<{
@@ -14,19 +17,22 @@ export type CrewSnapshot = Readonly<{
   characters: readonly Character[];
 }>;
 
-const byCode = (left: BankItem, right: BankItem): number => left.code.localeCompare(right.code);
-const byName = (left: Character, right: Character): number => left.name.localeCompare(right.name);
+const byCode = (left: BankItem, right: BankItem): number =>
+  left.code.localeCompare(right.code);
+const byName = (left: Character, right: Character): number =>
+  left.name.localeCompare(right.name);
 
 const readBankItems = (
-  client: Pick<CrewSnapshotClient, "getBankItems">,
+  client: Pick<CrewSnapshotClient, 'getBankItems'>,
 ): ResultAsync<readonly BankItem[], ArtifactsApiError> =>
   client.getBankItems({ page: 1, size: 100 }).andThen((firstPage) => {
     if (firstPage.pages <= 1) {
       return okAsync([...firstPage.data].sort(byCode));
     }
 
-    const remainingPages = Array.from({ length: firstPage.pages - 1 }, (_, index) =>
-      client.getBankItems({ page: index + 2, size: 100 }),
+    const remainingPages = Array.from(
+      { length: firstPage.pages - 1 },
+      (_, index) => client.getBankItems({ page: index + 2, size: 100 }),
     );
 
     return ResultAsync.combine(remainingPages).map((pages) =>

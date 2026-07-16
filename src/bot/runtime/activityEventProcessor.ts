@@ -1,9 +1,13 @@
-import { err, type Result, type ResultAsync } from "neverthrow";
+import { err, type Result, type ResultAsync } from 'neverthrow';
 
-import { finishActivity, type FinishActivityError } from "../orchestration/activityLifecycle.js";
-import type { CrewSnapshot } from "../orchestration/crewSnapshot.js";
-import type { OrchestratorState } from "../orchestration/orchestratorState.js";
-import type { ActivityRunOutcome } from "./activityLauncher.js";
+import {
+  finishActivity,
+  type FinishActivityError,
+} from '../orchestration/activityLifecycle.js';
+import type { CrewSnapshot } from '../orchestration/crewSnapshot.js';
+import type { OrchestratorState } from '../orchestration/orchestratorState.js';
+
+import type { ActivityRunOutcome } from './activityLauncher.js';
 
 export type ProcessedActivity<EActivity extends Error> = Readonly<{
   outcome: ActivityRunOutcome<EActivity>;
@@ -11,12 +15,17 @@ export type ProcessedActivity<EActivity extends Error> = Readonly<{
   state: OrchestratorState;
 }>;
 
-type ActivityEventProcessor<EActivity extends Error, ESnapshot extends Error> = Readonly<{
+type ActivityEventProcessor<
+  EActivity extends Error,
+  ESnapshot extends Error,
+> = Readonly<{
   getSnapshot: () => CrewSnapshot;
   getState: () => OrchestratorState;
   process: (
     outcome: ActivityRunOutcome<EActivity>,
-  ) => Promise<Result<ProcessedActivity<EActivity>, ESnapshot | FinishActivityError>>;
+  ) => Promise<
+    Result<ProcessedActivity<EActivity>, ESnapshot | FinishActivityError>
+  >;
 }>;
 
 /**
@@ -24,7 +33,10 @@ type ActivityEventProcessor<EActivity extends Error, ESnapshot extends Error> = 
  * accepted outcome releases its Reservation before refreshing the Crew
  * Snapshot; refresh failures keep the updated state and the previous snapshot.
  */
-export const createActivityEventProcessor = <EActivity extends Error, ESnapshot extends Error>(
+export const createActivityEventProcessor = <
+  EActivity extends Error,
+  ESnapshot extends Error,
+>(
   initialState: OrchestratorState,
   initialSnapshot: CrewSnapshot,
   refreshSnapshot: () => ResultAsync<CrewSnapshot, ESnapshot>,
@@ -38,7 +50,9 @@ export const createActivityEventProcessor = <EActivity extends Error, ESnapshot 
 
   const process = (
     outcome: ActivityRunOutcome<EActivity>,
-  ): Promise<Result<ProcessedActivity<EActivity>, ESnapshot | FinishActivityError>> => {
+  ): Promise<
+    Result<ProcessedActivity<EActivity>, ESnapshot | FinishActivityError>
+  > => {
     const processing = queue.then(async () => {
       const finished = finishActivity(state, outcome.event);
 
@@ -51,11 +65,7 @@ export const createActivityEventProcessor = <EActivity extends Error, ESnapshot 
       return (await refreshSnapshot()).map((refreshedSnapshot) => {
         snapshot = refreshedSnapshot;
 
-        return {
-          outcome,
-          snapshot,
-          state,
-        };
+        return { outcome, snapshot, state };
       });
     });
 

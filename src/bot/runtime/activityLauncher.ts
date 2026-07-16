@@ -1,22 +1,26 @@
-import type { Result, ResultAsync } from "neverthrow";
+import type { Result, ResultAsync } from 'neverthrow';
 
-import type { ExecutableActivity } from "./activityDispatcher.js";
 import {
   reserveStartedActivity,
   type ActivityTerminalEvent,
   type StartActivityError,
-} from "../orchestration/activityLifecycle.js";
-import type { ActivityAssignment, OrchestratorState } from "../orchestration/orchestratorState.js";
+} from '../orchestration/activityLifecycle.js';
+import type {
+  ActivityAssignment,
+  OrchestratorState,
+} from '../orchestration/orchestratorState.js';
 
-export type ActivityFailureDisposition = "blocked" | "transient";
+import type { ExecutableActivity } from './activityDispatcher.js';
 
-type ActivityEvent<TType extends ActivityTerminalEvent["type"]> = Readonly<
+export type ActivityFailureDisposition = 'blocked' | 'transient';
+
+type ActivityEvent<TType extends ActivityTerminalEvent['type']> = Readonly<
   ActivityTerminalEvent & { type: TType }
 >;
 
 export type ActivityRunOutcome<E extends Error> =
-  | Readonly<{ event: ActivityEvent<"cancelled" | "completed"> }>
-  | Readonly<{ error: E; event: ActivityEvent<"blocked"> }>;
+  | Readonly<{ event: ActivityEvent<'cancelled' | 'completed'> }>
+  | Readonly<{ error: E; event: ActivityEvent<'blocked'> }>;
 
 type ActivityLauncherDependencies<E extends Error> = Readonly<{
   classifyFailure: (error: E) => ActivityFailureDisposition;
@@ -29,7 +33,7 @@ export type LaunchedActivity<E extends Error> = Readonly<{
   state: OrchestratorState;
 }>;
 
-const buildTerminalEvent = <TType extends ActivityTerminalEvent["type"]>(
+const buildTerminalEvent = <TType extends ActivityTerminalEvent['type']>(
   assignment: ActivityAssignment<ExecutableActivity>,
   type: TType,
 ): ActivityEvent<TType> => ({
@@ -45,19 +49,19 @@ const runUntilTerminal = async <E extends Error>(
 ): Promise<ActivityRunOutcome<E>> => {
   for (;;) {
     if (signal?.aborted) {
-      return { event: buildTerminalEvent(assignment, "cancelled") };
+      return { event: buildTerminalEvent(assignment, 'cancelled') };
     }
 
     const result = await dependencies.execute(assignment.activity);
 
     if (result.isOk()) {
-      return { event: buildTerminalEvent(assignment, "completed") };
+      return { event: buildTerminalEvent(assignment, 'completed') };
     }
 
-    if (dependencies.classifyFailure(result.error) === "blocked") {
+    if (dependencies.classifyFailure(result.error) === 'blocked') {
       return {
         error: result.error,
-        event: buildTerminalEvent(assignment, "blocked"),
+        event: buildTerminalEvent(assignment, 'blocked'),
       };
     }
 

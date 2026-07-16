@@ -1,36 +1,34 @@
-import { err, ok, type Result } from "neverthrow";
+import { err, ok, type Result } from 'neverthrow';
 
-import type { components } from "../../client/schema.js";
-import type { ActivityAssignment, OrchestratorState } from "./orchestratorState.js";
-import type { CrewSnapshot } from "./crewSnapshot.js";
+import type { components } from '../../client/schema.js';
+
+import type { CrewSnapshot } from './crewSnapshot.js';
 import {
   planEquipmentProgression,
   type EquipmentMaterialSource,
   type EquipmentProgressionError,
   type PreviousActivityOutcome,
-} from "./equipmentProgression.js";
+} from './equipmentProgression.js';
+import type {
+  ActivityAssignment,
+  OrchestratorState,
+} from './orchestratorState.js';
 import {
   planResourceReplenishment,
   type Resource,
   type ResourceReplenishmentError,
-} from "./resourceReplenishment.js";
+} from './resourceReplenishment.js';
 
-type Item = Readonly<components["schemas"]["ItemSchema"]>;
+type Item = Readonly<components['schemas']['ItemSchema']>;
 
 type ConfiguredGoalPlan = Readonly<{
   activities: readonly ActivityAssignment[];
   state: OrchestratorState;
 }>;
 
-export type ResolvedGoalItem = Readonly<{
-  goalId: string;
-  item: Item;
-}>;
+export type ResolvedGoalItem = Readonly<{ goalId: string; item: Item }>;
 
-export type ResolvedGoalMaterialItem = Readonly<{
-  goalId: string;
-  item: Item;
-}>;
+export type ResolvedGoalMaterialItem = Readonly<{ goalId: string; item: Item }>;
 
 export type ResolvedGoalMaterialSource = Readonly<{
   goalId: string;
@@ -45,14 +43,14 @@ export type ResolvedGoalResource = Readonly<{
 export class GoalItemNotResolvedError extends Error {
   constructor(public readonly goalId: string) {
     super(`No item was resolved for Goal "${goalId}"`);
-    this.name = "GoalItemNotResolvedError";
+    this.name = 'GoalItemNotResolvedError';
   }
 }
 
 export class GoalResourceNotResolvedError extends Error {
   constructor(public readonly goalId: string) {
     super(`No resource was resolved for Goal "${goalId}"`);
-    this.name = "GoalResourceNotResolvedError";
+    this.name = 'GoalResourceNotResolvedError';
   }
 }
 
@@ -78,20 +76,28 @@ export const createConfiguredGoalPlanner = (
   resolvedMaterialSources: readonly ResolvedGoalMaterialSource[] = [],
   resolvedMaterialItems: readonly ResolvedGoalMaterialItem[] = [],
 ): ConfiguredGoalPlanner => {
-  const itemsByGoalId = new Map(resolvedItems.map(({ goalId, item }) => [goalId, item]));
+  const itemsByGoalId = new Map(
+    resolvedItems.map(({ goalId, item }) => [goalId, item]),
+  );
   const resourcesByGoalId = new Map(
     resolvedResources.map(({ goalId, resource }) => [goalId, resource]),
   );
-  const materialSourcesByGoalId = resolvedMaterialSources.reduce((byGoalId, resolvedSource) => {
-    const existing = byGoalId.get(resolvedSource.goalId) ?? [];
-    byGoalId.set(resolvedSource.goalId, [...existing, resolvedSource]);
-    return byGoalId;
-  }, new Map<string, readonly ResolvedGoalMaterialSource[]>());
-  const materialItemsByGoalId = resolvedMaterialItems.reduce((byGoalId, resolvedItem) => {
-    const existing = byGoalId.get(resolvedItem.goalId) ?? [];
-    byGoalId.set(resolvedItem.goalId, [...existing, resolvedItem.item]);
-    return byGoalId;
-  }, new Map<string, readonly Item[]>());
+  const materialSourcesByGoalId = resolvedMaterialSources.reduce(
+    (byGoalId, resolvedSource) => {
+      const existing = byGoalId.get(resolvedSource.goalId) ?? [];
+      byGoalId.set(resolvedSource.goalId, [...existing, resolvedSource]);
+      return byGoalId;
+    },
+    new Map<string, readonly ResolvedGoalMaterialSource[]>(),
+  );
+  const materialItemsByGoalId = resolvedMaterialItems.reduce(
+    (byGoalId, resolvedItem) => {
+      const existing = byGoalId.get(resolvedItem.goalId) ?? [];
+      byGoalId.set(resolvedItem.goalId, [...existing, resolvedItem.item]);
+      return byGoalId;
+    },
+    new Map<string, readonly Item[]>(),
+  );
 
   return (snapshot, state, previousOutcome) => {
     const activities: ActivityAssignment[] = [];
@@ -99,9 +105,12 @@ export const createConfiguredGoalPlanner = (
     const planningReservations = [...state.reservations];
 
     for (const goal of state.goals) {
-      const planningState = { goals: [goal], reservations: planningReservations };
+      const planningState = {
+        goals: [goal],
+        reservations: planningReservations,
+      };
       const planned =
-        goal.type === "equipItem"
+        goal.type === 'equipItem'
           ? (() => {
               const item = itemsByGoalId.get(goal.id);
 

@@ -1,14 +1,17 @@
-import { differenceInMilliseconds, parseISO } from "date-fns";
+import { differenceInMilliseconds, parseISO } from 'date-fns';
 
-import type { components } from "../client/schema.js";
+import type { components } from '../client/schema.js';
 
-export type Cooldown = components["schemas"]["CooldownSchema"];
+export type Cooldown = components['schemas']['CooldownSchema'];
 
 /**
- * Milliseconds remaining until `expiresAt` (an ISO date-time string), relative to `now`.
- * Never negative: an already-past timestamp resolves to 0.
+ * Milliseconds remaining until `expiresAt` (an ISO date-time string), relative
+ * to `now`. Never negative: an already-past timestamp resolves to 0.
  */
-export const msUntilExpiration = (expiresAt: string, now: Date = new Date()): number => {
+export const msUntilExpiration = (
+  expiresAt: string,
+  now: Date = new Date(),
+): number => {
   const remainingMs = differenceInMilliseconds(parseISO(expiresAt), now);
 
   return Math.max(0, remainingMs);

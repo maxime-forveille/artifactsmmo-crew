@@ -1,31 +1,34 @@
-import { err, ok, type Result } from "neverthrow";
+import { err, ok, type Result } from 'neverthrow';
 
-import type { ActivityAssignment, OrchestratorState } from "./orchestratorState.js";
+import type {
+  ActivityAssignment,
+  OrchestratorState,
+} from './orchestratorState.js';
 
 export type ActivityTerminalEvent = Readonly<{
   characterName: string;
   goalId: string;
-  type: "blocked" | "cancelled" | "completed";
+  type: 'blocked' | 'cancelled' | 'completed';
 }>;
 
 export class GoalNotFoundError extends Error {
   constructor(public readonly goalId: string) {
     super(`Goal "${goalId}" does not exist`);
-    this.name = "GoalNotFoundError";
+    this.name = 'GoalNotFoundError';
   }
 }
 
 export class CharacterAlreadyReservedError extends Error {
   constructor(public readonly characterName: string) {
     super(`Character "${characterName}" already has a Reservation`);
-    this.name = "CharacterAlreadyReservedError";
+    this.name = 'CharacterAlreadyReservedError';
   }
 }
 
 export class ReservationNotFoundError extends Error {
   constructor(public readonly characterName: string) {
     super(`Character "${characterName}" has no active Reservation`);
-    this.name = "ReservationNotFoundError";
+    this.name = 'ReservationNotFoundError';
   }
 }
 
@@ -38,12 +41,16 @@ export class ReservationGoalMismatchError extends Error {
     super(
       `Character "${characterName}" is reserved for Goal "${expectedGoalId}", not "${receivedGoalId}"`,
     );
-    this.name = "ReservationGoalMismatchError";
+    this.name = 'ReservationGoalMismatchError';
   }
 }
 
-export type StartActivityError = CharacterAlreadyReservedError | GoalNotFoundError;
-export type FinishActivityError = ReservationGoalMismatchError | ReservationNotFoundError;
+export type StartActivityError =
+  | CharacterAlreadyReservedError
+  | GoalNotFoundError;
+export type FinishActivityError =
+  | ReservationGoalMismatchError
+  | ReservationNotFoundError;
 
 /** Records an Activity only after the runtime has started it successfully. */
 export const reserveStartedActivity = (
@@ -55,7 +62,9 @@ export const reserveStartedActivity = (
   }
 
   if (
-    state.reservations.some((reservation) => reservation.characterName === assignment.characterName)
+    state.reservations.some(
+      (reservation) => reservation.characterName === assignment.characterName,
+    )
   ) {
     return err(new CharacterAlreadyReservedError(assignment.characterName));
   }
@@ -84,7 +93,11 @@ export const finishActivity = (
 
   if (reservation.goalId !== event.goalId) {
     return err(
-      new ReservationGoalMismatchError(event.characterName, reservation.goalId, event.goalId),
+      new ReservationGoalMismatchError(
+        event.characterName,
+        reservation.goalId,
+        event.goalId,
+      ),
     );
   }
 

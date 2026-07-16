@@ -1,5 +1,13 @@
-import { okAsync, ResultAsync } from "neverthrow";
+import { okAsync, ResultAsync } from 'neverthrow';
 
+import {
+  type ArtifactsApiError,
+  type ArtifactsClient,
+} from '../../client/index.js';
+import {
+  buildInitialOrchestratorState,
+  type OrchestrationConfig,
+} from '../../utils/orchestrationConfig.js';
 import {
   createConfiguredGoalPlanner,
   type ConfiguredGoalPlannerError,
@@ -7,14 +15,13 @@ import {
   type ResolvedGoalMaterialItem,
   type ResolvedGoalMaterialSource,
   type ResolvedGoalResource,
-} from "../orchestration/configuredGoalPlanner.js";
-import { createCrewRuntime, type CrewRuntimeStartError } from "./crewRuntime.js";
-import type { RollingActivityCoordinator } from "./rollingActivityCoordinator.js";
-import { type ArtifactsApiError, type ArtifactsClient } from "../../client/index.js";
+} from '../orchestration/configuredGoalPlanner.js';
+
 import {
-  buildInitialOrchestratorState,
-  type OrchestrationConfig,
-} from "../../utils/orchestrationConfig.js";
+  createCrewRuntime,
+  type CrewRuntimeStartError,
+} from './crewRuntime.js';
+import type { RollingActivityCoordinator } from './rollingActivityCoordinator.js';
 
 type ConfiguredCrewRuntimeOptions = Readonly<{
   config: OrchestrationConfig;
@@ -23,30 +30,35 @@ type ConfiguredCrewRuntimeOptions = Readonly<{
 }>;
 
 export const resolveConfiguredItems = (
-  client: Pick<ArtifactsClient, "getItem">,
+  client: Pick<ArtifactsClient, 'getItem'>,
   config: OrchestrationConfig,
 ): ResultAsync<readonly ResolvedGoalItem[], ArtifactsApiError> =>
   ResultAsync.combine(
     config.goals.flatMap((goal) =>
-      goal.type === "equipItem"
+      goal.type === 'equipItem'
         ? [
-            client.getItem(goal.itemCode).map((response) => ({
-              goalId: goal.id,
-              item: response.data,
-            })),
+            client
+              .getItem(goal.itemCode)
+              .map((response) => ({ goalId: goal.id, item: response.data })),
           ]
         : [],
     ),
   );
 
-type MaterialResolutionClient = Pick<ArtifactsClient, "getItem" | "getMonsters" | "getResources">;
+type MaterialResolutionClient = Pick<
+  ArtifactsClient,
+  'getItem' | 'getMonsters' | 'getResources'
+>;
 
 type ResolvedEquipmentMaterials = Readonly<{
   items: readonly ResolvedGoalMaterialItem[];
   sources: readonly ResolvedGoalMaterialSource[];
 }>;
 
-const emptyMaterials = (): ResolvedEquipmentMaterials => ({ items: [], sources: [] });
+const emptyMaterials = (): ResolvedEquipmentMaterials => ({
+  items: [],
+  sources: [],
+});
 
 const mergeMaterials = (
   groups: readonly ResolvedEquipmentMaterials[],
@@ -56,7 +68,7 @@ const mergeMaterials = (
 });
 
 const resolveUniqueMaterialSource = (
-  client: Pick<MaterialResolutionClient, "getMonsters" | "getResources">,
+  client: Pick<MaterialResolutionClient, 'getMonsters' | 'getResources'>,
   goalId: string,
   itemCode: string,
 ): ResultAsync<ResolvedGoalMaterialSource | undefined, ArtifactsApiError> =>
@@ -73,10 +85,7 @@ const resolveUniqueMaterialSource = (
     if (monster !== undefined) {
       return {
         goalId,
-        materialSource: {
-          itemCode,
-          source: { monster, type: "hunt" },
-        },
+        materialSource: { itemCode, source: { monster, type: 'hunt' } },
       };
     }
 
@@ -86,10 +95,7 @@ const resolveUniqueMaterialSource = (
       ? undefined
       : {
           goalId,
-          materialSource: {
-            itemCode,
-            source: { resource, type: "gather" },
-          },
+          materialSource: { itemCode, source: { resource, type: 'gather' } },
         };
   });
 
@@ -108,14 +114,18 @@ const resolveMaterialTree = (
     const resolvedItem = { goalId, item };
 
     if (item.craft?.skill === undefined) {
-      return resolveUniqueMaterialSource(client, goalId, item.code).map((source) => ({
-        items: [resolvedItem],
-        sources: source === undefined ? [] : [source],
-      }));
+      return resolveUniqueMaterialSource(client, goalId, item.code).map(
+        (source) => ({
+          items: [resolvedItem],
+          sources: source === undefined ? [] : [source],
+        }),
+      );
     }
 
     const nextAncestors = new Set([...ancestors, item.code]);
-    const materialCodes = [...new Set((item.craft.items ?? []).map((material) => material.code))];
+    const materialCodes = [
+      ...new Set((item.craft.items ?? []).map((material) => material.code)),
+    ];
 
     return ResultAsync.combine(
       materialCodes.map((materialCode) =>
@@ -136,7 +146,10 @@ const deduplicateMaterials = (
 ): ResolvedEquipmentMaterials => ({
   items: [
     ...new Map(
-      materials.items.map((resolved) => [`${resolved.goalId}:${resolved.item.code}`, resolved]),
+      materials.items.map((resolved) => [
+        `${resolved.goalId}:${resolved.item.code}`,
+        resolved,
+      ]),
     ).values(),
   ],
   sources: [
@@ -166,17 +179,19 @@ export const resolveEquipmentMaterials = (
   ).map((groups) => deduplicateMaterials(mergeMaterials(groups)));
 
 export const resolveConfiguredResources = (
-  client: Pick<ArtifactsClient, "getResource">,
+  client: Pick<ArtifactsClient, 'getResource'>,
   config: OrchestrationConfig,
 ): ResultAsync<readonly ResolvedGoalResource[], ArtifactsApiError> =>
   ResultAsync.combine(
     config.goals.flatMap((goal) =>
-      goal.type === "replenishBankItem"
+      goal.type === 'replenishBankItem'
         ? [
-            client.getResource(goal.resourceCode).map((response) => ({
-              goalId: goal.id,
-              resource: response.data,
-            })),
+            client
+              .getResource(goal.resourceCode)
+              .map((response) => ({
+                goalId: goal.id,
+                resource: response.data,
+              })),
           ]
         : [],
     ),

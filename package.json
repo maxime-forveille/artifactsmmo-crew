@@ -11,20 +11,20 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --env-file=.env src/index.ts",
-    "generate:api-types": "tsx scripts/generateApiTypes.ts",
-    "start": "node --env-file=.env dist/index.js",
     "build": "tsc -p tsconfig.build.json",
-    "type-check": "tsc --noEmit",
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "generate:api-types": "tsx scripts/generateApiTypes.ts",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "start": "node --env-file=.env dist/index.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:mutation": "tsx scripts/runMutationTests.ts",
     "test:mutation:dry": "tsx scripts/runMutationTests.ts --dryRunOnly",
     "test:watch": "vitest",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "format": "oxfmt",
-    "format:check": "oxfmt --check"
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "date-fns": "^4.4.0",

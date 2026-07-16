@@ -1,13 +1,17 @@
-import { err, ok, type Result } from "neverthrow";
+import { err, ok, type Result } from 'neverthrow';
 
-import type { ExecutableActivity } from "./activityDispatcher.js";
-import type { LaunchedActivity } from "./activityLauncher.js";
 import {
   reserveStartedActivity,
   type StartActivityError,
-} from "../orchestration/activityLifecycle.js";
-import type { CrewSnapshot } from "../orchestration/crewSnapshot.js";
-import type { ActivityAssignment, OrchestratorState } from "../orchestration/orchestratorState.js";
+} from '../orchestration/activityLifecycle.js';
+import type { CrewSnapshot } from '../orchestration/crewSnapshot.js';
+import type {
+  ActivityAssignment,
+  OrchestratorState,
+} from '../orchestration/orchestratorState.js';
+
+import type { ExecutableActivity } from './activityDispatcher.js';
+import type { LaunchedActivity } from './activityLauncher.js';
 
 export type ActivityPlan = Readonly<{
   activities: readonly ActivityAssignment<ExecutableActivity>[];
@@ -19,7 +23,10 @@ export type ActivityPlanner<EPlan extends Error> = (
   state: OrchestratorState,
 ) => Result<ActivityPlan, EPlan>;
 
-export type ActivityStarter<EActivity extends Error, EStart extends Error = StartActivityError> = (
+export type ActivityStarter<
+  EActivity extends Error,
+  EStart extends Error = StartActivityError,
+> = (
   state: OrchestratorState,
   assignment: ActivityAssignment<ExecutableActivity>,
 ) => Result<LaunchedActivity<EActivity>, EStart>;
@@ -35,7 +42,9 @@ const validatePlanStarts = (
 ): Result<OrchestratorState, StartActivityError> =>
   assignments.reduce<Result<OrchestratorState, StartActivityError>>(
     (result, assignment) =>
-      result.andThen((nextState) => reserveStartedActivity(nextState, assignment)),
+      result.andThen((nextState) =>
+        reserveStartedActivity(nextState, assignment),
+      ),
     ok(state),
   );
 
@@ -54,14 +63,20 @@ export const scheduleActivities = <
   state: OrchestratorState,
   plan: ActivityPlanner<EPlan>,
   start: ActivityStarter<EActivity, EStart>,
-): Result<ScheduledActivities<EActivity>, EPlan | EStart | StartActivityError> => {
+): Result<
+  ScheduledActivities<EActivity>,
+  EPlan | EStart | StartActivityError
+> => {
   const planned = plan(snapshot, state);
 
   if (planned.isErr()) {
     return err(planned.error);
   }
 
-  const validation = validatePlanStarts(planned.value.state, planned.value.activities);
+  const validation = validatePlanStarts(
+    planned.value.state,
+    planned.value.activities,
+  );
 
   if (validation.isErr()) {
     return err(validation.error);

@@ -1,18 +1,21 @@
-import { errAsync, okAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, type ResultAsync } from 'neverthrow';
 
-import type { ArtifactsApiError, ArtifactsClient } from "../../client/index.js";
-import { EQUIP_SLOT_BY_ITEM_TYPE, equippedItemInSlot } from "../gear.js";
-import { heldQuantity } from "../inventory.js";
-import type { CharacterAgent } from "../runtime/characterAgent.js";
-import type { EquipItemActivity } from "./activity.js";
+import type { ArtifactsApiError, ArtifactsClient } from '../../client/index.js';
+import { EQUIP_SLOT_BY_ITEM_TYPE, equippedItemInSlot } from '../gear.js';
+import { heldQuantity } from '../inventory.js';
+import type { CharacterAgent } from '../runtime/characterAgent.js';
+
+import type { EquipItemActivity } from './activity.js';
 
 export class UnsupportedEquipSlotError extends Error {
   constructor(
     public readonly itemCode: string,
     public readonly itemType: string,
   ) {
-    super(`Don't know which equipment slot fits item type "${itemType}" (item "${itemCode}")`);
-    this.name = "UnsupportedEquipSlotError";
+    super(
+      `Don't know which equipment slot fits item type "${itemType}" (item "${itemCode}")`,
+    );
+    this.name = 'UnsupportedEquipSlotError';
   }
 }
 
@@ -25,14 +28,14 @@ export class InsufficientEquipmentLevelError extends Error {
     super(
       `Equipping "${itemCode}" needs character level ${requiredLevel}, but the character is only level ${currentLevel}`,
     );
-    this.name = "InsufficientEquipmentLevelError";
+    this.name = 'InsufficientEquipmentLevelError';
   }
 }
 
 export class MissingEquipmentItemError extends Error {
   constructor(public readonly itemCode: string) {
     super(`Item "${itemCode}" is not held by the character`);
-    this.name = "MissingEquipmentItemError";
+    this.name = 'MissingEquipmentItemError';
   }
 }
 
@@ -42,12 +45,15 @@ export type EquipItemExecutionError =
   | MissingEquipmentItemError
   | UnsupportedEquipSlotError;
 
-type EquippingClient = Pick<ArtifactsClient, "getItem">;
-type EquippingAgent = Pick<CharacterAgent, "equip" | "getCharacter" | "unequip">;
+type EquippingClient = Pick<ArtifactsClient, 'getItem'>;
+type EquippingAgent = Pick<
+  CharacterAgent,
+  'equip' | 'getCharacter' | 'unequip'
+>;
 
 /**
- * Equips one policy-selected item already held by the character. It may
- * unequip the current slot occupant, but never retrieves or crafts the target.
+ * Equips one policy-selected item already held by the character. It may unequip
+ * the current slot occupant, but never retrieves or crafts the target.
  */
 export const runEquipItemActivity = (
   client: EquippingClient,
@@ -69,7 +75,13 @@ export const runEquipItemActivity = (
     }
 
     if (character.level < item.level) {
-      return errAsync(new InsufficientEquipmentLevelError(item.code, item.level, character.level));
+      return errAsync(
+        new InsufficientEquipmentLevelError(
+          item.code,
+          item.level,
+          character.level,
+        ),
+      );
     }
 
     if (heldQuantity(character, item.code) < 1) {
@@ -83,6 +95,8 @@ export const runEquipItemActivity = (
         : agent.unequip([{ quantity: 1, slot }]).map(() => undefined);
 
     return makeSlotAvailable.andThen(() =>
-      agent.equip([{ code: item.code, quantity: 1, slot }]).map(() => undefined),
+      agent
+        .equip([{ code: item.code, quantity: 1, slot }])
+        .map(() => undefined),
     );
   });

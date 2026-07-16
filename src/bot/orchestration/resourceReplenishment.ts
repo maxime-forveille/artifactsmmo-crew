@@ -1,37 +1,42 @@
-import { err, ok, type Result } from "neverthrow";
+import { err, ok, type Result } from 'neverthrow';
 
-import type { components } from "../../client/schema.js";
-import type { FarmResourceActivity } from "../activities/activity.js";
-import type { CrewSnapshot } from "./crewSnapshot.js";
+import type { components } from '../../client/schema.js';
+import type { FarmResourceActivity } from '../activities/activity.js';
+import { skillLevel } from '../progression.js';
+
+import type { CrewSnapshot } from './crewSnapshot.js';
 import type {
   ActivityAssignment,
   OrchestratorState,
   ReplenishBankItemGoal,
-} from "./orchestratorState.js";
-import { skillLevel } from "../progression.js";
+} from './orchestratorState.js';
 
-export type Resource = Readonly<components["schemas"]["ResourceSchema"]>;
-type Character = CrewSnapshot["characters"][number];
+export type Resource = Readonly<components['schemas']['ResourceSchema']>;
+type Character = CrewSnapshot['characters'][number];
 
 export class InvalidResourceTargetError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "InvalidResourceTargetError";
+    this.name = 'InvalidResourceTargetError';
   }
 }
 
 export class NoEligibleGathererError extends Error {
   constructor(
     public readonly resourceCode: string,
-    public readonly skill: Resource["skill"],
+    public readonly skill: Resource['skill'],
     public readonly requiredLevel: number,
   ) {
-    super(`No character can gather ${resourceCode}: ${skill} level ${requiredLevel} is required`);
-    this.name = "NoEligibleGathererError";
+    super(
+      `No character can gather ${resourceCode}: ${skill} level ${requiredLevel} is required`,
+    );
+    this.name = 'NoEligibleGathererError';
   }
 }
 
-export type ResourceReplenishmentError = InvalidResourceTargetError | NoEligibleGathererError;
+export type ResourceReplenishmentError =
+  | InvalidResourceTargetError
+  | NoEligibleGathererError;
 
 export type ResourceReplenishmentPlan = Readonly<{
   activities: readonly ActivityAssignment<FarmResourceActivity>[];
@@ -69,15 +74,20 @@ export const findBestGatherer = (
       return character.name.localeCompare(best.name) < 0 ? character : best;
     }, undefined);
 
-const unchangedPlan = (state: OrchestratorState): ResourceReplenishmentPlan => ({
-  activities: [],
-  state,
-});
+const unchangedPlan = (
+  state: OrchestratorState,
+): ResourceReplenishmentPlan => ({ activities: [], state });
 
-const validateGoal = (goal: ReplenishBankItemGoal): Result<void, InvalidResourceTargetError> =>
+const validateGoal = (
+  goal: ReplenishBankItemGoal,
+): Result<void, InvalidResourceTargetError> =>
   goal.minimumBankQuantity > 0
     ? ok(undefined)
-    : err(new InvalidResourceTargetError("minimumBankQuantity must be greater than zero"));
+    : err(
+        new InvalidResourceTargetError(
+          'minimumBankQuantity must be greater than zero',
+        ),
+      );
 
 const validateResource = (
   goal: ReplenishBankItemGoal,
@@ -85,7 +95,11 @@ const validateResource = (
 ): Result<void, InvalidResourceTargetError> =>
   resource.drops.some((drop) => drop.code === goal.itemCode)
     ? ok(undefined)
-    : err(new InvalidResourceTargetError(`${resource.code} does not drop ${goal.itemCode}`));
+    : err(
+        new InvalidResourceTargetError(
+          `${resource.code} does not drop ${goal.itemCode}`,
+        ),
+      );
 
 /**
  * Proposes at most one farming Activity for the highest-priority bank Goal.
@@ -100,7 +114,7 @@ export const planResourceReplenishment = (
 ): Result<ResourceReplenishmentPlan, ResourceReplenishmentError> => {
   const goal = state.goals[0];
 
-  if (goal === undefined || goal.type !== "replenishBankItem") {
+  if (goal === undefined || goal.type !== 'replenishBankItem') {
     return ok(unchangedPlan(state));
   }
 
@@ -110,17 +124,16 @@ export const planResourceReplenishment = (
     return err(goalValidation.error);
   }
 
-  if (state.reservations.some((reservation) => reservation.goalId === goal.id)) {
+  if (
+    state.reservations.some((reservation) => reservation.goalId === goal.id)
+  ) {
     return ok(unchangedPlan(state));
   }
 
   if (bankQuantity(snapshot, goal.itemCode) >= goal.minimumBankQuantity) {
     return ok({
       activities: [],
-      state: {
-        goals: state.goals.slice(1),
-        reservations: state.reservations,
-      },
+      state: { goals: state.goals.slice(1), reservations: state.reservations },
     });
   }
 
@@ -133,7 +146,13 @@ export const planResourceReplenishment = (
   const eligibleGatherer = findBestGatherer(snapshot, resource);
 
   if (eligibleGatherer === undefined) {
-    return err(new NoEligibleGathererError(resource.code, resource.skill, resource.level));
+    return err(
+      new NoEligibleGathererError(
+        resource.code,
+        resource.skill,
+        resource.level,
+      ),
+    );
   }
 
   const reservedCharacterNames = new Set(
@@ -147,7 +166,7 @@ export const planResourceReplenishment = (
 
   const activity = {
     resourceCode: resource.code,
-    type: "farmResource" as const,
+    type: 'farmResource' as const,
   };
   const assignment = {
     activity,
@@ -157,8 +176,5 @@ export const planResourceReplenishment = (
     produces: [{ itemCode: goal.itemCode }],
   };
 
-  return ok({
-    activities: [assignment],
-    state,
-  });
+  return ok({ activities: [assignment], state });
 };

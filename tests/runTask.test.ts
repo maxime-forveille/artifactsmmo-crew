@@ -1,17 +1,17 @@
-import { errAsync, okAsync } from "neverthrow";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { errAsync, okAsync } from 'neverthrow';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { runTask } from "../src/bot/tasks/runTask.js";
-import { ArtifactsApiError } from "../src/client/index.js";
-import type { ArtifactsClient } from "../src/client/index.js";
-import type { components } from "../src/client/schema.js";
+import { runTask } from '../src/bot/tasks/runTask.js';
+import { ArtifactsApiError } from '../src/client/index.js';
+import type { ArtifactsClient } from '../src/client/index.js';
+import type { components } from '../src/client/schema.js';
 
-type CharacterSnapshot = components["schemas"]["CharacterSchema"];
-type Cooldown = components["schemas"]["CooldownSchema"];
-type Item = components["schemas"]["ItemSchema"];
-type MapSchema = components["schemas"]["MapSchema"];
-type Monster = components["schemas"]["MonsterSchema"];
-type Resource = components["schemas"]["ResourceSchema"];
+type CharacterSnapshot = components['schemas']['CharacterSchema'];
+type Cooldown = components['schemas']['CooldownSchema'];
+type Item = components['schemas']['ItemSchema'];
+type MapSchema = components['schemas']['MapSchema'];
+type Monster = components['schemas']['MonsterSchema'];
+type Resource = components['schemas']['ResourceSchema'];
 
 const buildItem = (overrides: Partial<Item>): Item => ({
   ...({} as Item),
@@ -20,24 +20,28 @@ const buildItem = (overrides: Partial<Item>): Item => ({
 
 const buildCooldown = (expiration: string): Cooldown => ({
   expiration,
-  reason: "movement",
+  reason: 'movement',
   remaining_seconds: 0,
-  started_at: "2024-01-01T00:00:00.000Z",
+  started_at: '2024-01-01T00:00:00.000Z',
   total_seconds: 0,
 });
 
-const buildCharacter = (overrides: Partial<CharacterSnapshot> = {}): CharacterSnapshot => ({
+const buildCharacter = (
+  overrides: Partial<CharacterSnapshot> = {},
+): CharacterSnapshot => ({
   ...({} as CharacterSnapshot),
   inventory: [],
   inventory_max_items: 100,
   map_id: 1,
-  name: "Cartman",
+  name: 'Cartman',
   ...overrides,
 });
 
 // Full set of combat stats needed by isSafeToFight, all zeroed out by
 // default so tests can override just the fields they care about.
-const buildCombatCharacter = (overrides: Partial<CharacterSnapshot> = {}): CharacterSnapshot =>
+const buildCombatCharacter = (
+  overrides: Partial<CharacterSnapshot> = {},
+): CharacterSnapshot =>
   buildCharacter({
     attack_air: 0,
     attack_earth: 0,
@@ -60,11 +64,11 @@ const buildCombatCharacter = (overrides: Partial<CharacterSnapshot> = {}): Chara
 
 const buildResource = (overrides: Partial<Resource> = {}): Resource =>
   ({
-    code: "copper_rocks",
+    code: 'copper_rocks',
     drops: [],
     level: 1,
-    name: "Copper Rocks",
-    skill: "mining",
+    name: 'Copper Rocks',
+    skill: 'mining',
     ...overrides,
   }) as Resource;
 
@@ -74,7 +78,7 @@ const buildMonster = (overrides: Partial<Monster> = {}): Monster =>
     attack_earth: 0,
     attack_fire: 0,
     attack_water: 0,
-    code: "chicken",
+    code: 'chicken',
     critical_strike: 0,
     hp: 60,
     level: 1,
@@ -86,11 +90,13 @@ const buildMonster = (overrides: Partial<Monster> = {}): Monster =>
   }) as Monster;
 
 const notImplemented = () =>
-  errAsync(new ArtifactsApiError("not implemented in test", 501, undefined));
+  errAsync(new ArtifactsApiError('not implemented in test', 501, undefined));
 
-const buildFakeClient = (overrides: Partial<ArtifactsClient> = {}): ArtifactsClient =>
+const buildFakeClient = (
+  overrides: Partial<ArtifactsClient> = {},
+): ArtifactsClient =>
   ({
-    client: {} as ArtifactsClient["client"],
+    client: {} as ArtifactsClient['client'],
     craft: notImplemented,
     depositGold: notImplemented,
     depositItems: notImplemented,
@@ -113,27 +119,38 @@ const buildFakeClient = (overrides: Partial<ArtifactsClient> = {}): ArtifactsCli
     ...overrides,
   }) as ArtifactsClient;
 
-describe("runTask", () => {
-  it("logs and resolves without throwing when creating the character agent fails", async () => {
-    const apiError = new ArtifactsApiError("character not found", 498, undefined);
+describe('runTask', () => {
+  it('logs and resolves without throwing when creating the character agent fails', async () => {
+    const apiError = new ArtifactsApiError(
+      'character not found',
+      498,
+      undefined,
+    );
     const client = buildFakeClient({ getCharacter: () => errAsync(apiError) });
 
     await expect(
-      runTask(client, "Ghost", { items: ["copper_ring"], type: "craftAndEquip" }),
+      runTask(client, 'Ghost', {
+        items: ['copper_ring'],
+        type: 'craftAndEquip',
+      }),
     ).resolves.toBeUndefined();
   });
 
-  it("runs a craftAndEquip task: equips an item already held, without gathering or crafting", async () => {
+  it('runs a craftAndEquip task: equips an item already held, without gathering or crafting', async () => {
     const character = buildCharacter({
-      inventory: [{ code: "copper_ring", quantity: 1, slot: 1 }],
+      inventory: [{ code: 'copper_ring', quantity: 1, slot: 1 }],
     });
     const equip = vi.fn(() =>
       okAsync({
-        data: { character, cooldown: buildCooldown("2024-01-01T00:00:03.000Z"), items: [] },
+        data: {
+          character,
+          cooldown: buildCooldown('2024-01-01T00:00:03.000Z'),
+          items: [],
+        },
       }),
     );
     const getItem = vi.fn(() =>
-      okAsync({ data: buildItem({ code: "copper_ring", type: "ring" }) }),
+      okAsync({ data: buildItem({ code: 'copper_ring', type: 'ring' }) }),
     );
     const client = buildFakeClient({
       equip,
@@ -141,25 +158,34 @@ describe("runTask", () => {
       getItem,
     });
 
-    await runTask(client, "Cartman", { items: ["copper_ring"], type: "craftAndEquip" });
+    await runTask(client, 'Cartman', {
+      items: ['copper_ring'],
+      type: 'craftAndEquip',
+    });
 
-    expect(equip).toHaveBeenCalledWith("Cartman", [
-      { code: "copper_ring", quantity: 1, slot: "ring1" },
+    expect(equip).toHaveBeenCalledWith('Cartman', [
+      { code: 'copper_ring', quantity: 1, slot: 'ring1' },
     ]);
   });
 
-  it("keeps going to the next item in the list when one fails", async () => {
+  it('keeps going to the next item in the list when one fails', async () => {
     const character = buildCharacter({
-      inventory: [{ code: "copper_ring", quantity: 1, slot: 1 }],
+      inventory: [{ code: 'copper_ring', quantity: 1, slot: 1 }],
     });
     const getItem = vi.fn((code: string) =>
-      code === "broken_item"
-        ? okAsync({ data: buildItem({ code: "broken_item", type: "artifact" }) })
-        : okAsync({ data: buildItem({ code: "copper_ring", type: "ring" }) }),
+      code === 'broken_item'
+        ? okAsync({
+            data: buildItem({ code: 'broken_item', type: 'artifact' }),
+          })
+        : okAsync({ data: buildItem({ code: 'copper_ring', type: 'ring' }) }),
     );
     const equip = vi.fn(() =>
       okAsync({
-        data: { character, cooldown: buildCooldown("2024-01-01T00:00:03.000Z"), items: [] },
+        data: {
+          character,
+          cooldown: buildCooldown('2024-01-01T00:00:03.000Z'),
+          items: [],
+        },
       }),
     );
     const client = buildFakeClient({
@@ -168,39 +194,43 @@ describe("runTask", () => {
       getItem,
     });
 
-    await runTask(client, "Cartman", {
-      items: ["broken_item", "copper_ring"],
-      type: "craftAndEquip",
+    await runTask(client, 'Cartman', {
+      items: ['broken_item', 'copper_ring'],
+      type: 'craftAndEquip',
     });
 
-    expect(equip).toHaveBeenCalledWith("Cartman", [
-      { code: "copper_ring", quantity: 1, slot: "ring1" },
+    expect(equip).toHaveBeenCalledWith('Cartman', [
+      { code: 'copper_ring', quantity: 1, slot: 'ring1' },
     ]);
   });
 
-  describe("craftAndEquipThenHunt task", () => {
+  describe('craftAndEquipThenHunt task', () => {
     beforeEach(() => {
       vi.useFakeTimers();
-      vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
+      vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
     });
 
     afterEach(() => {
       vi.useRealTimers();
     });
 
-    it("crafts/equips the items, then switches to hunting", async () => {
+    it('crafts/equips the items, then switches to hunting', async () => {
       const character = buildCharacter({
-        inventory: [{ code: "copper_ring", quantity: 1, slot: 1 }],
+        inventory: [{ code: 'copper_ring', quantity: 1, slot: 1 }],
       });
       const equip = vi.fn(() =>
         okAsync({
-          data: { character, cooldown: buildCooldown("2024-01-01T00:00:03.000Z"), items: [] },
+          data: {
+            character,
+            cooldown: buildCooldown('2024-01-01T00:00:03.000Z'),
+            items: [],
+          },
         }),
       );
       const getItem = vi.fn(() =>
-        okAsync({ data: buildItem({ code: "copper_ring", type: "ring" }) }),
+        okAsync({ data: buildItem({ code: 'copper_ring', type: 'ring' }) }),
       );
-      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const apiError = new ArtifactsApiError('boom', 500, undefined);
       const getMaps = vi.fn(() => errAsync(apiError));
       const client = buildFakeClient({
         equip,
@@ -209,17 +239,17 @@ describe("runTask", () => {
         getMaps,
       });
 
-      void runTask(client, "Cartman", {
-        items: ["copper_ring"],
-        monster: "chicken",
-        type: "craftAndEquipThenHunt",
+      void runTask(client, 'Cartman', {
+        items: ['copper_ring'],
+        monster: 'chicken',
+        type: 'craftAndEquipThenHunt',
       });
 
       // Craft/equip phase resolves immediately (item already held), then the
       // hunt phase starts and retries on failure just like a plain "hunt" task.
       await vi.advanceTimersByTimeAsync(0);
-      expect(equip).toHaveBeenCalledWith("Cartman", [
-        { code: "copper_ring", quantity: 1, slot: "ring1" },
+      expect(equip).toHaveBeenCalledWith('Cartman', [
+        { code: 'copper_ring', quantity: 1, slot: 'ring1' },
       ]);
       expect(getMaps).toHaveBeenCalledTimes(1);
 
@@ -231,22 +261,25 @@ describe("runTask", () => {
     });
   });
 
-  describe("farm task", () => {
+  describe('farm task', () => {
     beforeEach(() => {
       vi.useFakeTimers();
-      vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
+      vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
     });
 
     afterEach(() => {
       vi.useRealTimers();
     });
 
-    it("retries after a delay when a farming cycle fails", async () => {
-      const apiError = new ArtifactsApiError("boom", 500, undefined);
+    it('retries after a delay when a farming cycle fails', async () => {
+      const apiError = new ArtifactsApiError('boom', 500, undefined);
       const getMaps = vi.fn(() => errAsync(apiError));
       const client = buildFakeClient({ getMaps });
 
-      void runTask(client, "Cartman", { resource: "copper_rocks", type: "farm" });
+      void runTask(client, 'Cartman', {
+        resource: 'copper_rocks',
+        type: 'farm',
+      });
 
       await vi.advanceTimersByTimeAsync(0);
       expect(getMaps).toHaveBeenCalledTimes(1);
@@ -258,15 +291,15 @@ describe("runTask", () => {
       expect(getMaps).toHaveBeenCalledTimes(2);
     });
 
-    it("equips the best gathering tool for the resource before starting to farm", async () => {
+    it('equips the best gathering tool for the resource before starting to farm', async () => {
       const character = buildCharacter({
-        inventory: [{ code: "copper_pickaxe", quantity: 1, slot: 1 }],
+        inventory: [{ code: 'copper_pickaxe', quantity: 1, slot: 1 }],
         level: 1,
       });
       const pickaxe = buildItem({
-        code: "copper_pickaxe",
-        effects: [{ code: "mining", description: "", value: -10 }],
-        type: "weapon",
+        code: 'copper_pickaxe',
+        effects: [{ code: 'mining', description: '', value: -10 }],
+        type: 'weapon',
       });
       const getResource = vi.fn(() => okAsync({ data: buildResource() }));
       const getItems = vi.fn(() =>
@@ -275,10 +308,14 @@ describe("runTask", () => {
       const getItem = vi.fn(() => okAsync({ data: pickaxe }));
       const equip = vi.fn(() =>
         okAsync({
-          data: { character, cooldown: buildCooldown("2024-01-01T00:00:03.000Z"), items: [] },
+          data: {
+            character,
+            cooldown: buildCooldown('2024-01-01T00:00:03.000Z'),
+            items: [],
+          },
         }),
       );
-      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const apiError = new ArtifactsApiError('boom', 500, undefined);
       const getMaps = vi.fn(() => errAsync(apiError));
       const client = buildFakeClient({
         equip,
@@ -289,13 +326,20 @@ describe("runTask", () => {
         getResource,
       });
 
-      void runTask(client, "Cartman", { resource: "copper_rocks", type: "farm" });
+      void runTask(client, 'Cartman', {
+        resource: 'copper_rocks',
+        type: 'farm',
+      });
 
       await vi.advanceTimersByTimeAsync(0);
-      expect(getResource).toHaveBeenCalledWith("copper_rocks");
-      expect(getItems).toHaveBeenCalledWith({ max_level: 1, size: 100, type: "weapon" });
-      expect(equip).toHaveBeenCalledWith("Cartman", [
-        { code: "copper_pickaxe", quantity: 1, slot: "weapon" },
+      expect(getResource).toHaveBeenCalledWith('copper_rocks');
+      expect(getItems).toHaveBeenCalledWith({
+        max_level: 1,
+        size: 100,
+        type: 'weapon',
+      });
+      expect(equip).toHaveBeenCalledWith('Cartman', [
+        { code: 'copper_pickaxe', quantity: 1, slot: 'weapon' },
       ]);
       expect(getMaps).toHaveBeenCalledTimes(1);
     });
@@ -303,9 +347,9 @@ describe("runTask", () => {
     it("does not equip a gathering tool that isn't free right now, keeping the current one", async () => {
       const character = buildCharacter({ level: 1 });
       const pickaxe = buildItem({
-        code: "copper_pickaxe",
-        effects: [{ code: "mining", description: "", value: -10 }],
-        type: "weapon",
+        code: 'copper_pickaxe',
+        effects: [{ code: 'mining', description: '', value: -10 }],
+        type: 'weapon',
       });
       const getResource = vi.fn(() => okAsync({ data: buildResource() }));
       const getItems = vi.fn(() =>
@@ -318,9 +362,11 @@ describe("runTask", () => {
       const getResources = vi.fn(() =>
         okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
       );
-      const getMonsters = vi.fn(() => okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }));
+      const getMonsters = vi.fn(() =>
+        okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
+      );
       const equip = vi.fn();
-      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const apiError = new ArtifactsApiError('boom', 500, undefined);
       const getMaps = vi.fn(() => errAsync(apiError));
       const client = buildFakeClient({
         equip,
@@ -334,31 +380,40 @@ describe("runTask", () => {
         getResources,
       });
 
-      void runTask(client, "Cartman", { resource: "copper_rocks", type: "farm" });
+      void runTask(client, 'Cartman', {
+        resource: 'copper_rocks',
+        type: 'farm',
+      });
 
       await vi.advanceTimersByTimeAsync(0);
-      expect(getBankItems).toHaveBeenCalledWith({ item_code: "copper_pickaxe" });
+      expect(getBankItems).toHaveBeenCalledWith({
+        item_code: 'copper_pickaxe',
+      });
       expect(equip).not.toHaveBeenCalled();
     });
   });
 
-  describe("autoFarm task", () => {
+  describe('autoFarm task', () => {
     beforeEach(() => {
       vi.useFakeTimers();
-      vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
+      vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
     });
 
     afterEach(() => {
       vi.useRealTimers();
     });
 
-    it("picks the highest-level resource for the skill, then farms it", async () => {
+    it('picks the highest-level resource for the skill, then farms it', async () => {
       const character = buildCharacter({ level: 1, mining_level: 8 });
-      const resource = buildResource({ code: "iron_rocks", level: 8, skill: "mining" });
+      const resource = buildResource({
+        code: 'iron_rocks',
+        level: 8,
+        skill: 'mining',
+      });
       const getResources = vi.fn(() =>
         okAsync({ data: [resource], page: 1, pages: 1, size: 50, total: 1 }),
       );
-      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const apiError = new ArtifactsApiError('boom', 500, undefined);
       const getMaps = vi.fn(() => errAsync(apiError));
       const client = buildFakeClient({
         getCharacter: () => okAsync({ data: character }),
@@ -366,10 +421,13 @@ describe("runTask", () => {
         getResources,
       });
 
-      void runTask(client, "Cartman", { skill: "mining", type: "autoFarm" });
+      void runTask(client, 'Cartman', { skill: 'mining', type: 'autoFarm' });
 
       await vi.advanceTimersByTimeAsync(0);
-      expect(getResources).toHaveBeenCalledWith({ max_level: 8, skill: "mining" });
+      expect(getResources).toHaveBeenCalledWith({
+        max_level: 8,
+        skill: 'mining',
+      });
       expect(getMaps).toHaveBeenCalledTimes(1); // resolveLocation("resource", "iron_rocks")
 
       await vi.advanceTimersByTimeAsync(9_999);
@@ -379,7 +437,7 @@ describe("runTask", () => {
       expect(getMaps).toHaveBeenCalledTimes(2);
     });
 
-    it("retries after a delay when no resource is currently within reach for the skill", async () => {
+    it('retries after a delay when no resource is currently within reach for the skill', async () => {
       const character = buildCharacter({ level: 1, mining_level: 1 });
       const getResources = vi.fn(() =>
         okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
@@ -391,7 +449,7 @@ describe("runTask", () => {
         getResources,
       });
 
-      void runTask(client, "Cartman", { skill: "mining", type: "autoFarm" });
+      void runTask(client, 'Cartman', { skill: 'mining', type: 'autoFarm' });
 
       await vi.advanceTimersByTimeAsync(0);
       expect(getResources).toHaveBeenCalledTimes(1);
@@ -405,22 +463,22 @@ describe("runTask", () => {
     });
   });
 
-  describe("hunt task", () => {
+  describe('hunt task', () => {
     beforeEach(() => {
       vi.useFakeTimers();
-      vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
+      vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
     });
 
     afterEach(() => {
       vi.useRealTimers();
     });
 
-    it("retries after a delay when a hunting cycle fails", async () => {
-      const apiError = new ArtifactsApiError("boom", 500, undefined);
+    it('retries after a delay when a hunting cycle fails', async () => {
+      const apiError = new ArtifactsApiError('boom', 500, undefined);
       const getMaps = vi.fn(() => errAsync(apiError));
       const client = buildFakeClient({ getMaps });
 
-      void runTask(client, "Cartman", { monster: "chicken", type: "hunt" });
+      void runTask(client, 'Cartman', { monster: 'chicken', type: 'hunt' });
 
       await vi.advanceTimersByTimeAsync(0);
       expect(getMaps).toHaveBeenCalledTimes(1);
@@ -432,17 +490,21 @@ describe("runTask", () => {
       expect(getMaps).toHaveBeenCalledTimes(2);
     });
 
-    it("equips the best combat weapon for the monster before starting to hunt", async () => {
+    it('equips the best combat weapon for the monster before starting to hunt', async () => {
       const character = buildCombatCharacter({
         attack_earth: 20,
-        inventory: [{ code: "copper_dagger", quantity: 1, slot: 1 }],
+        inventory: [{ code: 'copper_dagger', quantity: 1, slot: 1 }],
         level: 4,
       });
-      const monster = buildMonster({ code: "chicken", res_air: 0, res_earth: 0 });
+      const monster = buildMonster({
+        code: 'chicken',
+        res_air: 0,
+        res_earth: 0,
+      });
       const dagger = buildItem({
-        code: "copper_dagger",
-        effects: [{ code: "attack_air", description: "", value: 6 }],
-        type: "weapon",
+        code: 'copper_dagger',
+        effects: [{ code: 'attack_air', description: '', value: 6 }],
+        type: 'weapon',
       });
       const getMonster = vi.fn(() => okAsync({ data: monster }));
       const getItems = vi.fn(() =>
@@ -451,10 +513,14 @@ describe("runTask", () => {
       const getItem = vi.fn(() => okAsync({ data: dagger }));
       const equip = vi.fn(() =>
         okAsync({
-          data: { character, cooldown: buildCooldown("2024-01-01T00:00:03.000Z"), items: [] },
+          data: {
+            character,
+            cooldown: buildCooldown('2024-01-01T00:00:03.000Z'),
+            items: [],
+          },
         }),
       );
-      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const apiError = new ArtifactsApiError('boom', 500, undefined);
       const getMaps = vi.fn(() => errAsync(apiError));
       const client = buildFakeClient({
         equip,
@@ -465,24 +531,32 @@ describe("runTask", () => {
         getMonster,
       });
 
-      void runTask(client, "Cartman", { monster: "chicken", type: "hunt" });
+      void runTask(client, 'Cartman', { monster: 'chicken', type: 'hunt' });
 
       await vi.advanceTimersByTimeAsync(0);
-      expect(getMonster).toHaveBeenCalledWith("chicken");
-      expect(getItems).toHaveBeenCalledWith({ max_level: 4, size: 100, type: "weapon" });
-      expect(equip).toHaveBeenCalledWith("Cartman", [
-        { code: "copper_dagger", quantity: 1, slot: "weapon" },
+      expect(getMonster).toHaveBeenCalledWith('chicken');
+      expect(getItems).toHaveBeenCalledWith({
+        max_level: 4,
+        size: 100,
+        type: 'weapon',
+      });
+      expect(equip).toHaveBeenCalledWith('Cartman', [
+        { code: 'copper_dagger', quantity: 1, slot: 'weapon' },
       ]);
       expect(getMaps).toHaveBeenCalledTimes(1);
     });
 
     it("does not equip a better weapon that isn't free right now, keeping the current one", async () => {
       const character = buildCombatCharacter({ attack_earth: 20, level: 4 });
-      const monster = buildMonster({ code: "chicken", res_air: 0, res_earth: 0 });
+      const monster = buildMonster({
+        code: 'chicken',
+        res_air: 0,
+        res_earth: 0,
+      });
       const dagger = buildItem({
-        code: "copper_dagger",
-        effects: [{ code: "attack_air", description: "", value: 6 }],
-        type: "weapon",
+        code: 'copper_dagger',
+        effects: [{ code: 'attack_air', description: '', value: 6 }],
+        type: 'weapon',
       });
       const getMonster = vi.fn(() => okAsync({ data: monster }));
       const getItems = vi.fn(() =>
@@ -495,9 +569,11 @@ describe("runTask", () => {
       const getResources = vi.fn(() =>
         okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
       );
-      const getMonsters = vi.fn(() => okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }));
+      const getMonsters = vi.fn(() =>
+        okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
+      );
       const equip = vi.fn();
-      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const apiError = new ArtifactsApiError('boom', 500, undefined);
       const getMaps = vi.fn(() => errAsync(apiError));
       const client = buildFakeClient({
         equip,
@@ -511,39 +587,44 @@ describe("runTask", () => {
         getResources,
       });
 
-      void runTask(client, "Cartman", { monster: "chicken", type: "hunt" });
+      void runTask(client, 'Cartman', { monster: 'chicken', type: 'hunt' });
 
       await vi.advanceTimersByTimeAsync(0);
-      expect(getMonster).toHaveBeenCalledWith("chicken");
-      expect(getBankItems).toHaveBeenCalledWith({ item_code: "copper_dagger" });
+      expect(getMonster).toHaveBeenCalledWith('chicken');
+      expect(getBankItems).toHaveBeenCalledWith({ item_code: 'copper_dagger' });
       expect(equip).not.toHaveBeenCalled();
     });
   });
 
-  describe("autoHunt task", () => {
+  describe('autoHunt task', () => {
     beforeEach(() => {
       vi.useFakeTimers();
-      vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
+      vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
     });
 
     afterEach(() => {
       vi.useRealTimers();
     });
 
-    it("picks a safe monster via findNextSafeMonster, then hunts it", async () => {
+    it('picks a safe monster via findNextSafeMonster, then hunts it', async () => {
       const character = buildCombatCharacter({
         attack_earth: 20,
         hp: 150,
         level: 4,
         max_hp: 150,
       });
-      const monster = buildMonster({ attack_water: 4, code: "chicken", hp: 60, level: 1 });
+      const monster = buildMonster({
+        attack_water: 4,
+        code: 'chicken',
+        hp: 60,
+        level: 1,
+      });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [monster], page: 1, pages: 1, size: 50, total: 1 }),
       );
       // Let the hunting cycle itself fail so we can reuse the same
       // retry-timing assertions as the other task tests below.
-      const apiError = new ArtifactsApiError("boom", 500, undefined);
+      const apiError = new ArtifactsApiError('boom', 500, undefined);
       const getMaps = vi.fn(() => errAsync(apiError));
       const client = buildFakeClient({
         getCharacter: () => okAsync({ data: character }),
@@ -551,7 +632,7 @@ describe("runTask", () => {
         getMonsters,
       });
 
-      void runTask(client, "Cartman", { type: "autoHunt" });
+      void runTask(client, 'Cartman', { type: 'autoHunt' });
 
       await vi.advanceTimersByTimeAsync(0);
       expect(getMonsters).toHaveBeenCalledWith({ max_level: 4 });
@@ -564,14 +645,29 @@ describe("runTask", () => {
       expect(getMaps).toHaveBeenCalledTimes(2);
     });
 
-    it("retries after a delay when no monster is currently safe to fight", async () => {
+    it('retries after a delay when no monster is currently safe to fight', async () => {
       // Full HP, 0 attack in every element - nothing is safe because it
       // can't deal damage, not because of low HP (see the dedicated resting
       // test below for that case).
-      const character = buildCombatCharacter({ hp: 100, level: 4, max_hp: 100 });
-      const dangerousMonster = buildMonster({ attack_earth: 50, code: "cow", hp: 2_000, level: 4 });
+      const character = buildCombatCharacter({
+        hp: 100,
+        level: 4,
+        max_hp: 100,
+      });
+      const dangerousMonster = buildMonster({
+        attack_earth: 50,
+        code: 'cow',
+        hp: 2_000,
+        level: 4,
+      });
       const getMonsters = vi.fn(() =>
-        okAsync({ data: [dangerousMonster], page: 1, pages: 1, size: 50, total: 1 }),
+        okAsync({
+          data: [dangerousMonster],
+          page: 1,
+          pages: 1,
+          size: 50,
+          total: 1,
+        }),
       );
       const getMaps = vi.fn();
       const client = buildFakeClient({
@@ -580,7 +676,7 @@ describe("runTask", () => {
         getMonsters,
       });
 
-      void runTask(client, "Cartman", { type: "autoHunt" });
+      void runTask(client, 'Cartman', { type: 'autoHunt' });
 
       await vi.advanceTimersByTimeAsync(0);
       expect(getMonsters).toHaveBeenCalledTimes(1);
@@ -593,21 +689,31 @@ describe("runTask", () => {
       expect(getMonsters).toHaveBeenCalledTimes(2);
     });
 
-    it("rests first even when no monster ends up being safe (regression: characters stuck retrying forever at critically low HP)", async () => {
+    it('rests first even when no monster ends up being safe (regression: characters stuck retrying forever at critically low HP)', async () => {
       // At 1/170 HP, isSafeToFight correctly finds nothing safe to fight -
       // but that must not prevent resting: without a rest-first step, a
       // character in this state could never recover (see combat.ts's
       // restIfLow doc comment).
-      const character = buildCombatCharacter({ attack_earth: 20, hp: 1, level: 4, max_hp: 170 });
-      const anyMonster = buildMonster({ code: "chicken", hp: 60, level: 1 });
+      const character = buildCombatCharacter({
+        attack_earth: 20,
+        hp: 1,
+        level: 4,
+        max_hp: 170,
+      });
+      const anyMonster = buildMonster({ code: 'chicken', hp: 60, level: 1 });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [anyMonster], page: 1, pages: 1, size: 50, total: 1 }),
       );
       const rest = vi.fn(() =>
         okAsync({
           data: {
-            character: buildCombatCharacter({ attack_earth: 20, hp: 170, level: 4, max_hp: 170 }),
-            cooldown: buildCooldown("2024-01-01T00:00:03.000Z"),
+            character: buildCombatCharacter({
+              attack_earth: 20,
+              hp: 170,
+              level: 4,
+              max_hp: 170,
+            }),
+            cooldown: buildCooldown('2024-01-01T00:00:03.000Z'),
             hp_restored: 169,
           },
         }),
@@ -618,7 +724,7 @@ describe("runTask", () => {
         rest,
       });
 
-      void runTask(client, "Cartman", { type: "autoHunt" });
+      void runTask(client, 'Cartman', { type: 'autoHunt' });
 
       await vi.advanceTimersByTimeAsync(0);
       expect(rest).toHaveBeenCalledTimes(1);
@@ -630,15 +736,22 @@ describe("runTask", () => {
       // after a process restart) would never trigger a future "level
       // increased" comparison, so a fully free upgrade could sit
       // unequipped indefinitely - found live.
-      const character = buildCombatCharacter({ attack_earth: 20, hp: 170, level: 4, max_hp: 170 });
-      const monster = buildMonster({ code: "chicken", hp: 60, level: 1 });
+      const character = buildCombatCharacter({
+        attack_earth: 20,
+        hp: 170,
+        level: 4,
+        max_hp: 170,
+      });
+      const monster = buildMonster({ code: 'chicken', hp: 60, level: 1 });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [monster], page: 1, pages: 1, size: 50, total: 1 }),
       );
       const getItems = vi.fn((_query?: { type?: string }) =>
         okAsync({ data: [], page: 1, pages: 1, size: 100, total: 0 }),
       );
-      const getMaps = vi.fn(() => errAsync(new ArtifactsApiError("boom", 500, undefined)));
+      const getMaps = vi.fn(() =>
+        errAsync(new ArtifactsApiError('boom', 500, undefined)),
+      );
       const client = buildFakeClient({
         getCharacter: () => okAsync({ data: character }),
         getItems,
@@ -646,29 +759,45 @@ describe("runTask", () => {
         getMonsters,
       });
 
-      void runTask(client, "Cartman", { type: "autoHunt" });
+      void runTask(client, 'Cartman', { type: 'autoHunt' });
 
       await vi.advanceTimersByTimeAsync(0);
       const sortStrings = (a: string | undefined, b: string | undefined) =>
-        (a ?? "").localeCompare(b ?? "");
-      const queriedTypes = getItems.mock.calls.map(([query]) => query?.type).sort(sortStrings);
+        (a ?? '').localeCompare(b ?? '');
+      const queriedTypes = getItems.mock.calls
+        .map(([query]) => query?.type)
+        .sort(sortStrings);
       expect(queriedTypes).toEqual(
-        ["amulet", "body_armor", "boots", "helmet", "leg_armor", "ring", "shield", "weapon"].sort(
-          sortStrings,
-        ),
+        [
+          'amulet',
+          'body_armor',
+          'boots',
+          'helmet',
+          'leg_armor',
+          'ring',
+          'shield',
+          'weapon',
+        ].sort(sortStrings),
       );
     });
 
-    it("only re-checks the weapon slot on a later cycle, once the first-cycle scan already happened", async () => {
-      const character = buildCombatCharacter({ attack_earth: 20, hp: 170, level: 4, max_hp: 170 });
-      const monster = buildMonster({ code: "chicken", hp: 60, level: 1 });
+    it('only re-checks the weapon slot on a later cycle, once the first-cycle scan already happened', async () => {
+      const character = buildCombatCharacter({
+        attack_earth: 20,
+        hp: 170,
+        level: 4,
+        max_hp: 170,
+      });
+      const monster = buildMonster({ code: 'chicken', hp: 60, level: 1 });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [monster], page: 1, pages: 1, size: 50, total: 1 }),
       );
       const getItems = vi.fn((_query?: { type?: string }) =>
         okAsync({ data: [], page: 1, pages: 1, size: 100, total: 0 }),
       );
-      const getMaps = vi.fn(() => errAsync(new ArtifactsApiError("boom", 500, undefined)));
+      const getMaps = vi.fn(() =>
+        errAsync(new ArtifactsApiError('boom', 500, undefined)),
+      );
       const client = buildFakeClient({
         getCharacter: () => okAsync({ data: character }),
         getItems,
@@ -676,7 +805,7 @@ describe("runTask", () => {
         getMonsters,
       });
 
-      void runTask(client, "Cartman", { type: "autoHunt" });
+      void runTask(client, 'Cartman', { type: 'autoHunt' });
 
       // First cycle: the initial full-slot scan (see the test above), then
       // the hunting cycle itself fails (getMaps errors), so runForever waits
@@ -686,12 +815,17 @@ describe("runTask", () => {
 
       await vi.advanceTimersByTimeAsync(10_000);
       const queriedTypes = getItems.mock.calls.map(([query]) => query?.type);
-      expect(queriedTypes).toEqual(["weapon"]);
+      expect(queriedTypes).toEqual(['weapon']);
     });
 
-    it("checks every combat slot right after the character levels up", async () => {
-      const character = buildCombatCharacter({ attack_earth: 20, hp: 1, level: 4, max_hp: 170 });
-      const monster = buildMonster({ code: "chicken", hp: 60, level: 1 });
+    it('checks every combat slot right after the character levels up', async () => {
+      const character = buildCombatCharacter({
+        attack_earth: 20,
+        hp: 1,
+        level: 4,
+        max_hp: 170,
+      });
+      const monster = buildMonster({ code: 'chicken', hp: 60, level: 1 });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [monster], page: 1, pages: 1, size: 50, total: 1 }),
       );
@@ -708,7 +842,7 @@ describe("runTask", () => {
               level: 5,
               max_hp: 170,
             }),
-            cooldown: buildCooldown("2024-01-01T00:00:03.000Z"),
+            cooldown: buildCooldown('2024-01-01T00:00:03.000Z'),
             hp_restored: 169,
           },
         }),
@@ -716,7 +850,9 @@ describe("runTask", () => {
       const getItems = vi.fn((_query?: { type?: string }) =>
         okAsync({ data: [], page: 1, pages: 1, size: 100, total: 0 }),
       );
-      const getMaps = vi.fn(() => errAsync(new ArtifactsApiError("boom", 500, undefined)));
+      const getMaps = vi.fn(() =>
+        errAsync(new ArtifactsApiError('boom', 500, undefined)),
+      );
       const client = buildFakeClient({
         getCharacter: () => okAsync({ data: character }),
         getItems,
@@ -725,20 +861,29 @@ describe("runTask", () => {
         rest,
       });
 
-      void runTask(client, "Cartman", { type: "autoHunt" });
+      void runTask(client, 'Cartman', { type: 'autoHunt' });
 
       await vi.advanceTimersByTimeAsync(0);
       const sortStrings = (a: string | undefined, b: string | undefined) =>
-        (a ?? "").localeCompare(b ?? "");
-      const queriedTypes = getItems.mock.calls.map(([query]) => query?.type).sort(sortStrings);
+        (a ?? '').localeCompare(b ?? '');
+      const queriedTypes = getItems.mock.calls
+        .map(([query]) => query?.type)
+        .sort(sortStrings);
       expect(queriedTypes).toEqual(
-        ["amulet", "body_armor", "boots", "helmet", "leg_armor", "ring", "shield", "weapon"].sort(
-          sortStrings,
-        ),
+        [
+          'amulet',
+          'body_armor',
+          'boots',
+          'helmet',
+          'leg_armor',
+          'ring',
+          'shield',
+          'weapon',
+        ].sort(sortStrings),
       );
     });
 
-    it("equips a worthwhile upgrade at level-up even when it needs gathering first, as long as its material has a known source", async () => {
+    it('equips a worthwhile upgrade at level-up even when it needs gathering first, as long as its material has a known source', async () => {
       const held = new Map<string, number>();
       const buildLeveledCharacter = (): CharacterSnapshot =>
         buildCombatCharacter({
@@ -752,15 +897,15 @@ describe("runTask", () => {
           level: 5,
           map_id: 1,
           max_hp: 170,
-          weapon_slot: "",
+          weapon_slot: '',
         });
-      const monster = buildMonster({ code: "chicken", hp: 60, level: 1 });
+      const monster = buildMonster({ code: 'chicken', hp: 60, level: 1 });
       const newWeapon = buildItem({
-        code: "new_weapon",
-        effects: [{ code: "attack_earth", description: "", value: 30 }],
-        type: "weapon",
+        code: 'new_weapon',
+        effects: [{ code: 'attack_earth', description: '', value: 30 }],
+        type: 'weapon',
       });
-      const newWeaponResource = buildResource({ code: "new_weapon_node" });
+      const newWeaponResource = buildResource({ code: 'new_weapon_node' });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [monster], page: 1, pages: 1, size: 50, total: 1 }),
       );
@@ -773,18 +918,18 @@ describe("runTask", () => {
         okAsync({
           data: {
             character: buildLeveledCharacter(),
-            cooldown: buildCooldown("2024-01-01T00:00:00.000Z"),
+            cooldown: buildCooldown('2024-01-01T00:00:00.000Z'),
             hp_restored: 169,
           },
         }),
       );
       const getItems = vi.fn((query?: { type?: string }) =>
         okAsync({
-          data: query?.type === "weapon" ? [newWeapon] : [],
+          data: query?.type === 'weapon' ? [newWeapon] : [],
           page: 1,
           pages: 1,
           size: 100,
-          total: query?.type === "weapon" ? 1 : 0,
+          total: query?.type === 'weapon' ? 1 : 0,
         }),
       );
       const getItem = vi.fn(() => okAsync({ data: newWeapon }));
@@ -792,11 +937,22 @@ describe("runTask", () => {
         okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
       );
       const getResources = vi.fn(() =>
-        okAsync({ data: [newWeaponResource], page: 1, pages: 1, size: 50, total: 1 }),
+        okAsync({
+          data: [newWeaponResource],
+          page: 1,
+          pages: 1,
+          size: 50,
+          total: 1,
+        }),
       );
       const getMaps = vi.fn((query?: { content_type?: string }) =>
         okAsync({
-          data: [{ ...({} as MapSchema), map_id: query?.content_type === "monster" ? 1 : 2 }],
+          data: [
+            {
+              ...({} as MapSchema),
+              map_id: query?.content_type === 'monster' ? 1 : 2,
+            },
+          ],
           page: 1,
           pages: 1,
           size: 50,
@@ -807,18 +963,18 @@ describe("runTask", () => {
         okAsync({
           data: {
             character: buildLeveledCharacter(),
-            cooldown: buildCooldown("2024-01-01T00:00:00.000Z"),
+            cooldown: buildCooldown('2024-01-01T00:00:00.000Z'),
             destination: { ...({} as MapSchema), map_id: 2 },
             path: [],
           },
         }),
       );
       const gather = vi.fn(() => {
-        held.set("new_weapon", (held.get("new_weapon") ?? 0) + 1);
+        held.set('new_weapon', (held.get('new_weapon') ?? 0) + 1);
         return okAsync({
           data: {
             character: buildLeveledCharacter(),
-            cooldown: buildCooldown("2024-01-01T00:00:00.000Z"),
+            cooldown: buildCooldown('2024-01-01T00:00:00.000Z'),
             details: { items: [], xp: 1 },
           },
         });
@@ -827,7 +983,7 @@ describe("runTask", () => {
         okAsync({
           data: {
             character: buildLeveledCharacter(),
-            cooldown: buildCooldown("2024-01-01T00:00:00.000Z"),
+            cooldown: buildCooldown('2024-01-01T00:00:00.000Z'),
             items: [],
           },
         }),
@@ -844,7 +1000,7 @@ describe("runTask", () => {
               level: 4,
               map_id: 1,
               max_hp: 170,
-              weapon_slot: "",
+              weapon_slot: '',
             }),
           }),
         getItem,
@@ -856,11 +1012,11 @@ describe("runTask", () => {
         rest,
       });
 
-      void runTask(client, "Cartman", { type: "autoHunt" });
+      void runTask(client, 'Cartman', { type: 'autoHunt' });
 
       await vi.advanceTimersByTimeAsync(0);
-      expect(equip).toHaveBeenCalledWith("Cartman", [
-        { code: "new_weapon", quantity: 1, slot: "weapon" },
+      expect(equip).toHaveBeenCalledWith('Cartman', [
+        { code: 'new_weapon', quantity: 1, slot: 'weapon' },
       ]);
     });
 
@@ -871,13 +1027,13 @@ describe("runTask", () => {
         level: 4,
         map_id: 1,
         max_hp: 170,
-        weapon_slot: "",
+        weapon_slot: '',
       });
-      const monster = buildMonster({ code: "chicken", hp: 60, level: 1 });
+      const monster = buildMonster({ code: 'chicken', hp: 60, level: 1 });
       const newWeapon = buildItem({
-        code: "new_weapon",
-        effects: [{ code: "attack_earth", description: "", value: 30 }],
-        type: "weapon",
+        code: 'new_weapon',
+        effects: [{ code: 'attack_earth', description: '', value: 30 }],
+        type: 'weapon',
       });
       const getMonsters = vi.fn((query?: { drop?: string }) =>
         okAsync({
@@ -897,20 +1053,20 @@ describe("runTask", () => {
               level: 5,
               map_id: 1,
               max_hp: 170,
-              weapon_slot: "",
+              weapon_slot: '',
             }),
-            cooldown: buildCooldown("2024-01-01T00:00:03.000Z"),
+            cooldown: buildCooldown('2024-01-01T00:00:03.000Z'),
             hp_restored: 169,
           },
         }),
       );
       const getItems = vi.fn((query?: { type?: string }) =>
         okAsync({
-          data: query?.type === "weapon" ? [newWeapon] : [],
+          data: query?.type === 'weapon' ? [newWeapon] : [],
           page: 1,
           pages: 1,
           size: 100,
-          total: query?.type === "weapon" ? 1 : 0,
+          total: query?.type === 'weapon' ? 1 : 0,
         }),
       );
       const getItem = vi.fn(() => okAsync({ data: newWeapon }));
@@ -921,7 +1077,9 @@ describe("runTask", () => {
         okAsync({ data: [], page: 1, pages: 1, size: 50, total: 0 }),
       );
       const equip = vi.fn();
-      const getMaps = vi.fn(() => errAsync(new ArtifactsApiError("boom", 500, undefined)));
+      const getMaps = vi.fn(() =>
+        errAsync(new ArtifactsApiError('boom', 500, undefined)),
+      );
       const client = buildFakeClient({
         equip,
         getBankItems,
@@ -934,39 +1092,39 @@ describe("runTask", () => {
         rest,
       });
 
-      void runTask(client, "Cartman", { type: "autoHunt" });
+      void runTask(client, 'Cartman', { type: 'autoHunt' });
 
       await vi.advanceTimersByTimeAsync(0);
-      expect(getBankItems).toHaveBeenCalledWith({ item_code: "new_weapon" });
+      expect(getBankItems).toHaveBeenCalledWith({ item_code: 'new_weapon' });
       expect(equip).not.toHaveBeenCalled();
     });
 
-    it("re-checks every combat slot once a tracked profession-level block is cleared, even without a character level-up", async () => {
-      const monster = buildMonster({ code: "chicken", hp: 60, level: 1 });
+    it('re-checks every combat slot once a tracked profession-level block is cleared, even without a character level-up', async () => {
+      const monster = buildMonster({ code: 'chicken', hp: 60, level: 1 });
       const blockedWeapon = buildItem({
-        code: "blocked_weapon",
+        code: 'blocked_weapon',
         craft: {
-          items: [{ code: "iron_ore", quantity: 1 }],
+          items: [{ code: 'iron_ore', quantity: 1 }],
           level: 5,
           quantity: 1,
-          skill: "weaponcrafting",
+          skill: 'weaponcrafting',
         },
-        type: "weapon",
+        type: 'weapon',
       });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [monster], page: 1, pages: 1, size: 50, total: 1 }),
       );
       const getItems = vi.fn((query?: { type?: string }) =>
         okAsync({
-          data: query?.type === "weapon" ? [blockedWeapon] : [],
+          data: query?.type === 'weapon' ? [blockedWeapon] : [],
           page: 1,
           pages: 1,
           size: 100,
-          total: query?.type === "weapon" ? 1 : 0,
+          total: query?.type === 'weapon' ? 1 : 0,
         }),
       );
       const getItem = vi.fn((code: string) =>
-        code === "blocked_weapon"
+        code === 'blocked_weapon'
           ? okAsync({ data: blockedWeapon })
           : okAsync({ data: buildItem({ code }) }),
       );
@@ -975,14 +1133,16 @@ describe("runTask", () => {
       );
       const getResources = vi.fn(() =>
         okAsync({
-          data: [buildResource({ code: "iron_rocks" })],
+          data: [buildResource({ code: 'iron_rocks' })],
           page: 1,
           pages: 1,
           size: 50,
           total: 1,
         }),
       );
-      const getMaps = vi.fn(() => errAsync(new ArtifactsApiError("boom", 500, undefined)));
+      const getMaps = vi.fn(() =>
+        errAsync(new ArtifactsApiError('boom', 500, undefined)),
+      );
       let weaponcraftingLevel = 0;
       // Always resolves with hp low enough that restIfLow keeps calling
       // rest() every cycle - deliberately, so this mock's response (and so
@@ -996,10 +1156,10 @@ describe("runTask", () => {
               hp: 1,
               level: 4,
               max_hp: 170,
-              weapon_slot: "",
+              weapon_slot: '',
               weaponcrafting_level: weaponcraftingLevel,
             }),
-            cooldown: buildCooldown("2024-01-01T00:00:00.000Z"),
+            cooldown: buildCooldown('2024-01-01T00:00:00.000Z'),
             hp_restored: 0,
           },
         }),
@@ -1013,7 +1173,7 @@ describe("runTask", () => {
               hp: 1,
               level: 4,
               max_hp: 170,
-              weapon_slot: "",
+              weapon_slot: '',
               weaponcrafting_level: 0,
             }),
           }),
@@ -1025,14 +1185,16 @@ describe("runTask", () => {
         rest,
       });
 
-      void runTask(client, "Cartman", { type: "autoHunt" });
+      void runTask(client, 'Cartman', { type: 'autoHunt' });
 
       // Cycle 1: first-cycle full scan hits InsufficientCraftingLevelError
       // for the weapon slot (weaponcrafting_level 0 < 5) and records it as a
       // pending unlock. The hunting cycle itself then fails (getMaps
       // errors), so runForever waits its retry delay before cycle 2.
       await vi.advanceTimersByTimeAsync(0);
-      const weaponChecksInCycle1 = getItems.mock.calls.filter(([q]) => q?.type === "weapon").length;
+      const weaponChecksInCycle1 = getItems.mock.calls.filter(
+        ([q]) => q?.type === 'weapon',
+      ).length;
       expect(weaponChecksInCycle1).toBe(1);
 
       getItems.mockClear();
@@ -1040,16 +1202,25 @@ describe("runTask", () => {
 
       await vi.advanceTimersByTimeAsync(10_000);
       const sortStrings = (a: string | undefined, b: string | undefined) =>
-        (a ?? "").localeCompare(b ?? "");
-      const queriedTypesCycle2 = getItems.mock.calls.map(([q]) => q?.type).sort(sortStrings);
+        (a ?? '').localeCompare(b ?? '');
+      const queriedTypesCycle2 = getItems.mock.calls
+        .map(([q]) => q?.type)
+        .sort(sortStrings);
       expect(queriedTypesCycle2).toEqual(
-        ["amulet", "body_armor", "boots", "helmet", "leg_armor", "ring", "shield", "weapon"].sort(
-          sortStrings,
-        ),
+        [
+          'amulet',
+          'body_armor',
+          'boots',
+          'helmet',
+          'leg_armor',
+          'ring',
+          'shield',
+          'weapon',
+        ].sort(sortStrings),
       );
     });
 
-    it("keeps crafting bounded recipes for the exact blocked profession until its target level", async () => {
+    it('keeps crafting bounded recipes for the exact blocked profession until its target level', async () => {
       const held = new Map<string, number>();
       let weaponcraftingLevel = 1;
       const buildLeveledCharacter = (): CharacterSnapshot =>
@@ -1065,29 +1236,29 @@ describe("runTask", () => {
           map_id: 1,
           max_hp: 170,
           mining_level: 5,
-          weapon_slot: "",
+          weapon_slot: '',
           weaponcrafting_level: weaponcraftingLevel,
         });
-      const monster = buildMonster({ code: "chicken", hp: 60, level: 1 });
+      const monster = buildMonster({ code: 'chicken', hp: 60, level: 1 });
       const blockedWeapon = buildItem({
-        code: "blocked_weapon",
+        code: 'blocked_weapon',
         craft: {
-          items: [{ code: "iron_ore", quantity: 1 }],
+          items: [{ code: 'iron_ore', quantity: 1 }],
           level: 3,
           quantity: 1,
-          skill: "weaponcrafting",
+          skill: 'weaponcrafting',
         },
-        type: "weapon",
+        type: 'weapon',
       });
       const practiceDagger = buildItem({
-        code: "practice_dagger",
+        code: 'practice_dagger',
         craft: {
-          items: [{ code: "copper_bar", quantity: 1 }],
+          items: [{ code: 'copper_bar', quantity: 1 }],
           level: 1,
           quantity: 1,
-          skill: "weaponcrafting",
+          skill: 'weaponcrafting',
         },
-        type: "weapon",
+        type: 'weapon',
       });
       const getMonsters = vi.fn(() =>
         okAsync({ data: [monster], page: 1, pages: 1, size: 50, total: 1 }),
@@ -1096,25 +1267,25 @@ describe("runTask", () => {
         okAsync({
           data: {
             character: buildLeveledCharacter(),
-            cooldown: buildCooldown("2024-01-01T00:00:00.000Z"),
+            cooldown: buildCooldown('2024-01-01T00:00:00.000Z'),
             hp_restored: 169,
           },
         }),
       );
       const getItems = vi.fn((query?: { type?: string }) =>
         okAsync({
-          data: query?.type === "weapon" ? [blockedWeapon] : [],
+          data: query?.type === 'weapon' ? [blockedWeapon] : [],
           page: 1,
           pages: 1,
           size: 100,
-          total: query?.type === "weapon" ? 1 : 0,
+          total: query?.type === 'weapon' ? 1 : 0,
         }),
       );
       const getItem = vi.fn((code: string) => {
-        if (code === "practice_dagger") {
+        if (code === 'practice_dagger') {
           return okAsync({ data: practiceDagger });
         }
-        if (code === "blocked_weapon") {
+        if (code === 'blocked_weapon') {
           return okAsync({ data: blockedWeapon });
         }
         // Every other code (iron_ore, copper_ore, ...) is a plain raw
@@ -1124,23 +1295,33 @@ describe("runTask", () => {
       const getBankItems = vi.fn((query?: { item_code?: string }) =>
         okAsync({
           data:
-            query?.item_code === undefined || query.item_code === "copper_bar"
-              ? [{ code: "copper_bar", quantity: 10 }]
+            query?.item_code === undefined || query.item_code === 'copper_bar'
+              ? [{ code: 'copper_bar', quantity: 10 }]
               : [],
           page: 1,
           pages: 1,
           size: 50,
-          total: query?.item_code === undefined || query.item_code === "copper_bar" ? 1 : 0,
+          total:
+            query?.item_code === undefined || query.item_code === 'copper_bar'
+              ? 1
+              : 0,
         }),
       );
-      const getItemsForProgress = vi.fn((query?: { craft_skill?: string; type?: string }) =>
-        query?.craft_skill === "weaponcrafting"
-          ? okAsync({ data: [practiceDagger], page: 1, pages: 1, size: 100, total: 1 })
-          : getItems(query),
+      const getItemsForProgress = vi.fn(
+        (query?: { craft_skill?: string; type?: string }) =>
+          query?.craft_skill === 'weaponcrafting'
+            ? okAsync({
+                data: [practiceDagger],
+                page: 1,
+                pages: 1,
+                size: 100,
+                total: 1,
+              })
+            : getItems(query),
       );
       const getResources = vi.fn(() =>
         okAsync({
-          data: [buildResource({ code: "iron_rocks" })],
+          data: [buildResource({ code: 'iron_rocks' })],
           page: 1,
           pages: 1,
           size: 50,
@@ -1160,39 +1341,43 @@ describe("runTask", () => {
         okAsync({
           data: {
             character: buildLeveledCharacter(),
-            cooldown: buildCooldown("2024-01-01T00:00:00.000Z"),
+            cooldown: buildCooldown('2024-01-01T00:00:00.000Z'),
             destination: { ...({} as MapSchema), map_id: 2 },
             path: [],
           },
         }),
       );
-      const withdrawItems = vi.fn((_name: string, items: { code: string; quantity: number }[]) => {
-        for (const item of items) {
-          held.set(item.code, (held.get(item.code) ?? 0) + item.quantity);
-        }
-        return okAsync({
-          data: {
-            bank: [],
-            character: buildLeveledCharacter(),
-            cooldown: buildCooldown("2024-01-01T00:00:00.000Z"),
-            items: [],
-          },
-        });
-      });
-      const craft = vi.fn((_name: string, code: string, quantity = 1) => {
-        held.set("copper_bar", (held.get("copper_bar") ?? 0) - quantity);
-        held.set(code, (held.get(code) ?? 0) + quantity);
-        if (code === "practice_dagger") {
-          weaponcraftingLevel += 1;
-        }
-        return okAsync({
-          data: {
-            character: buildLeveledCharacter(),
-            cooldown: buildCooldown("2024-01-01T00:00:00.000Z"),
-            details: { items: [], xp: 1 },
-          },
-        });
-      });
+      const withdrawItems = vi.fn(
+        (_name: string, items: { code: string; quantity: number }[]) => {
+          for (const item of items) {
+            held.set(item.code, (held.get(item.code) ?? 0) + item.quantity);
+          }
+          return okAsync({
+            data: {
+              bank: [],
+              character: buildLeveledCharacter(),
+              cooldown: buildCooldown('2024-01-01T00:00:00.000Z'),
+              items: [],
+            },
+          });
+        },
+      );
+      const craft = vi.fn(
+        (_name: string, code: string, quantity: number = 1) => {
+          held.set('copper_bar', (held.get('copper_bar') ?? 0) - quantity);
+          held.set(code, (held.get(code) ?? 0) + quantity);
+          if (code === 'practice_dagger') {
+            weaponcraftingLevel += 1;
+          }
+          return okAsync({
+            data: {
+              character: buildLeveledCharacter(),
+              cooldown: buildCooldown('2024-01-01T00:00:00.000Z'),
+              details: { items: [], xp: 1 },
+            },
+          });
+        },
+      );
       const client = buildFakeClient({
         craft,
         getBankItems,
@@ -1205,7 +1390,7 @@ describe("runTask", () => {
               map_id: 1,
               max_hp: 170,
               mining_level: 5,
-              weapon_slot: "",
+              weapon_slot: '',
               weaponcrafting_level: weaponcraftingLevel,
             }),
           }),
@@ -1219,12 +1404,12 @@ describe("runTask", () => {
         withdrawItems,
       });
 
-      void runTask(client, "Cartman", { type: "autoHunt" });
+      void runTask(client, 'Cartman', { type: 'autoHunt' });
 
       await vi.advanceTimersByTimeAsync(10_000);
       expect(craft).toHaveBeenCalledTimes(2);
-      expect(craft).toHaveBeenNthCalledWith(1, "Cartman", "practice_dagger", 1);
-      expect(craft).toHaveBeenNthCalledWith(2, "Cartman", "practice_dagger", 1);
+      expect(craft).toHaveBeenNthCalledWith(1, 'Cartman', 'practice_dagger', 1);
+      expect(craft).toHaveBeenNthCalledWith(2, 'Cartman', 'practice_dagger', 1);
     });
   });
 });

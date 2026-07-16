@@ -1,27 +1,36 @@
-import { err, type ResultAsync } from "neverthrow";
+import { err, type ResultAsync } from 'neverthrow';
 
-import { runActivity, type ActivityExecutionError } from "./activityDispatcher.js";
-import { launchActivity } from "./activityLauncher.js";
-import type { ActivityStarter } from "./activityScheduler.js";
-import { createCharacterAgentFromSnapshot, type CharacterAgent } from "./characterAgent.js";
+import { ArtifactsApiError, type ArtifactsClient } from '../../client/index.js';
+import type { StartActivityError } from '../orchestration/activityLifecycle.js';
+import { readCrewSnapshot } from '../orchestration/crewSnapshot.js';
+import type { OrchestratorState } from '../orchestration/orchestratorState.js';
+
+import {
+  runActivity,
+  type ActivityExecutionError,
+} from './activityDispatcher.js';
+import { launchActivity } from './activityLauncher.js';
+import type { ActivityStarter } from './activityScheduler.js';
+import {
+  createCharacterAgentFromSnapshot,
+  type CharacterAgent,
+} from './characterAgent.js';
 import {
   createRollingActivityCoordinator,
   type RollingActivityCoordinator,
   type RollingActivityPlanner,
-} from "./rollingActivityCoordinator.js";
-import { ArtifactsApiError, type ArtifactsClient } from "../../client/index.js";
-import { readCrewSnapshot } from "../orchestration/crewSnapshot.js";
-import type { OrchestratorState } from "../orchestration/orchestratorState.js";
-import type { StartActivityError } from "../orchestration/activityLifecycle.js";
+} from './rollingActivityCoordinator.js';
 
 export class CharacterAgentNotFoundError extends Error {
   constructor(public readonly characterName: string) {
     super(`No Character Agent exists for "${characterName}"`);
-    this.name = "CharacterAgentNotFoundError";
+    this.name = 'CharacterAgentNotFoundError';
   }
 }
 
-export type CrewRuntimeStartError = CharacterAgentNotFoundError | StartActivityError;
+export type CrewRuntimeStartError =
+  | CharacterAgentNotFoundError
+  | StartActivityError;
 
 type CrewRuntimeOptions<EPlan extends Error> = Readonly<{
   initialState: OrchestratorState;
@@ -30,7 +39,9 @@ type CrewRuntimeOptions<EPlan extends Error> = Readonly<{
   waitBeforeRetry: () => Promise<void>;
 }>;
 
-export const isTransientArtifactsApiError = (error: ArtifactsApiError): boolean =>
+export const isTransientArtifactsApiError = (
+  error: ArtifactsApiError,
+): boolean =>
   error.status === 0 ||
   error.status === 408 ||
   error.status === 425 ||
@@ -39,10 +50,10 @@ export const isTransientArtifactsApiError = (error: ArtifactsApiError): boolean 
 
 export const classifyActivityExecutionError = (
   error: ActivityExecutionError,
-): "blocked" | "transient" =>
+): 'blocked' | 'transient' =>
   error instanceof ArtifactsApiError && isTransientArtifactsApiError(error)
-    ? "transient"
-    : "blocked";
+    ? 'transient'
+    : 'blocked';
 
 const createActivityStarter =
   (
@@ -77,7 +88,10 @@ const createActivityStarter =
 export const createCrewRuntime = <EPlan extends Error>(
   client: ArtifactsClient,
   options: CrewRuntimeOptions<EPlan>,
-): ResultAsync<RollingActivityCoordinator<EPlan, CrewRuntimeStartError>, ArtifactsApiError> =>
+): ResultAsync<
+  RollingActivityCoordinator<EPlan, CrewRuntimeStartError>,
+  ArtifactsApiError
+> =>
   readCrewSnapshot(client).map((initialSnapshot) => {
     const agents = new Map(
       initialSnapshot.characters.map((character) => [

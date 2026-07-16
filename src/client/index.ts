@@ -1,12 +1,13 @@
-import createClient, { type Middleware } from "openapi-fetch";
-import { err, ok, ResultAsync } from "neverthrow";
+import { err, ok, ResultAsync } from 'neverthrow';
+import createClient, { type Middleware } from 'openapi-fetch';
 
-import { env } from "../utils/config.js";
-import { logger } from "../utils/logger.js";
-import { API_BASE_URL } from "./constants.js";
-import { memoizeAsync, memoizeAsyncWithTtl } from "./memoize.js";
-import { createRateLimiter, type RateLimitWindow } from "./rateLimiter.js";
-import type { components, paths } from "./schema.js";
+import { env } from '../utils/config.js';
+import { logger } from '../utils/logger.js';
+
+import { API_BASE_URL } from './constants.js';
+import { memoizeAsync, memoizeAsyncWithTtl } from './memoize.js';
+import { createRateLimiter, type RateLimitWindow } from './rateLimiter.js';
+import type { components, paths } from './schema.js';
 
 export class ArtifactsApiError extends Error {
   constructor(
@@ -15,30 +16,29 @@ export class ArtifactsApiError extends Error {
     public readonly body: unknown,
   ) {
     super(message);
-    this.name = "ArtifactsApiError";
+    this.name = 'ArtifactsApiError';
   }
 }
 
-type FetchResult<T> = {
-  data?: T;
-  error?: unknown;
-  response: Response;
-};
+type FetchResult<T> = { data?: T; error?: unknown; response: Response };
 
 /**
- * Turns an openapi-fetch call into a `ResultAsync`, so callers can never
- * forget to handle a failure path (unlike a thrown exception, the error is
- * part of the type and must be handled via `.match`, `.map`, `.mapErr`, ...).
+ * Turns an openapi-fetch call into a `ResultAsync`, so callers can never forget
+ * to handle a failure path (unlike a thrown exception, the error is part of the
+ * type and must be handled via `.match`, `.map`, `.mapErr`, ...).
  */
-const toResult = <T>(promise: Promise<FetchResult<T>>): ResultAsync<T, ArtifactsApiError> =>
+const toResult = <T>(
+  promise: Promise<FetchResult<T>>,
+): ResultAsync<T, ArtifactsApiError> =>
   ResultAsync.fromPromise(
     promise,
-    (thrown) => new ArtifactsApiError("Artifacts API request failed to send", 0, thrown),
+    (thrown) =>
+      new ArtifactsApiError('Artifacts API request failed to send', 0, thrown),
   ).andThen(({ data, error, response }) => {
     if (error !== undefined) {
       logger.error(
         { body: error, status: response.status, url: response.url },
-        "Artifacts API request failed",
+        'Artifacts API request failed',
       );
       return err(
         new ArtifactsApiError(
@@ -49,21 +49,31 @@ const toResult = <T>(promise: Promise<FetchResult<T>>): ResultAsync<T, Artifacts
       );
     }
 
-    return ok(data as T);
+    if (data === undefined) {
+      return err(
+        new ArtifactsApiError(
+          'Artifacts API response contained no data',
+          response.status,
+          undefined,
+        ),
+      );
+    }
+
+    return ok(data);
   });
 
 const authMiddleware = (token: string): Middleware => ({
   onRequest({ request }) {
-    request.headers.set("Authorization", `Bearer ${token}`);
+    request.headers.set('Authorization', `Bearer ${token}`);
     return request;
   },
 });
 
 /**
  * Applies a rate limiter to requests matched by `shouldLimit`. Each bucket
- * documented at https://docs.artifactsmmo.com/api_guide/rate_limits is
- * shared across the whole account/IP (i.e. across all 5 characters),
- * separately from each character's own action cooldown.
+ * documented at https://docs.artifactsmmo.com/api_guide/rate_limits is shared
+ * across the whole account/IP (i.e. across all 5 characters), separately from
+ * each character's own action cooldown.
  */
 const rateLimitMiddleware = (
   shouldLimit: (request: Request) => boolean,
@@ -83,23 +93,22 @@ const rateLimitMiddleware = (
 };
 
 const isActionRequest = (request: Request): boolean =>
-  new URL(request.url).pathname.includes("/action/");
+  new URL(request.url).pathname.includes('/action/');
 
 // The `data` bucket covers every GET endpoint this client uses
 // (characters/maps/items/resources/...).
-const isDataRequest = (request: Request): boolean => request.method === "GET";
+const isDataRequest = (request: Request): boolean => request.method === 'GET';
 
 /**
  * Shaves a safety margin off the server-documented limits before we enforce
  * them locally. We record a request as "sent" the moment it leaves this
- * process, not when the server actually counts it, so network latency and
- * clock skew can land us exactly on the server's own boundary even while
- * staying under ours. The limits are also per-IP (not just per-token), so
- * any other traffic sharing this connection (e.g. the game's website open
- * in a browser tab) eats into the same budget. Leaving 40% headroom
- * (empirically verified live against a burst of 17 requests, see
- * `createRateLimiter`'s doc comment) avoids tripping the server-side 429 in
- * both cases.
+ * process, not when the server actually counts it, so network latency and clock
+ * skew can land us exactly on the server's own boundary even while staying
+ * under ours. The limits are also per-IP (not just per-token), so any other
+ * traffic sharing this connection (e.g. the game's website open in a browser
+ * tab) eats into the same budget. Leaving 40% headroom (empirically verified
+ * live against a burst of 17 requests, see `createRateLimiter`'s doc comment)
+ * avoids tripping the server-side 429 in both cases.
  */
 const SAFETY_MARGIN = 0.6;
 
@@ -113,7 +122,9 @@ const CHARACTER_LOG_CACHE_TTL_MS = 120_000;
 // soon as they successfully change the bank.
 const BANK_ITEMS_CACHE_TTL_MS = 5_000;
 
-const withSafetyMargin = (windows: readonly RateLimitWindow[]): RateLimitWindow[] =>
+const withSafetyMargin = (
+  windows: readonly RateLimitWindow[],
+): RateLimitWindow[] =>
   windows.map((window) => ({
     ...window,
     limit: Math.max(1, Math.floor(window.limit * SAFETY_MARGIN)),
@@ -123,8 +134,9 @@ const withSafetyMargin = (windows: readonly RateLimitWindow[]): RateLimitWindow[
  * Thin, fully-typed wrapper around the Artifacts MMO REST API.
  *
  * Every method returns a `ResultAsync<T, ArtifactsApiError>` rather than
- * throwing, so the error case is part of the return type and must be
- * handled explicitly (e.g. via `.match(onOk, onErr)`).
+ * throwing, so the error case is part of the return type and must be handled
+ * explicitly (e.g. via `.match(onOk, onErr)`).
+ *
  * @see https://docs.artifactsmmo.com/
  */
 export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
@@ -152,9 +164,9 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
   );
 
   const getCharacter = (name: string) =>
-    toResult(client.GET("/characters/{name}", { params: { path: { name } } }));
+    toResult(client.GET('/characters/{name}', { params: { path: { name } } }));
 
-  const getMyCharacters = () => toResult(client.GET("/my/characters"));
+  const getMyCharacters = () => toResult(client.GET('/my/characters'));
 
   // These 7 catalog endpoints describe game content (items, monsters,
   // resources, maps) that never changes for as long as this process runs -
@@ -167,81 +179,117 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
   const cacheKey = (...args: unknown[]): string => JSON.stringify(args);
 
   const getMaps = memoizeAsync(
-    (query?: paths["/maps"]["get"]["parameters"]["query"]) =>
-      toResult(client.GET("/maps", { params: query === undefined ? {} : { query } })),
+    (query?: paths['/maps']['get']['parameters']['query']) =>
+      toResult(
+        client.GET('/maps', { params: query === undefined ? {} : { query } }),
+      ),
     cacheKey,
   );
 
   const getItem = memoizeAsync(
-    (code: string) => toResult(client.GET("/items/{code}", { params: { path: { code } } })),
+    (code: string) =>
+      toResult(client.GET('/items/{code}', { params: { path: { code } } })),
     cacheKey,
   );
 
   const getItems = memoizeAsync(
-    (query?: paths["/items"]["get"]["parameters"]["query"]) =>
-      toResult(client.GET("/items", { params: query === undefined ? {} : { query } })),
+    (query?: paths['/items']['get']['parameters']['query']) =>
+      toResult(
+        client.GET('/items', { params: query === undefined ? {} : { query } }),
+      ),
     cacheKey,
   );
 
   const getResource = memoizeAsync(
-    (code: string) => toResult(client.GET("/resources/{code}", { params: { path: { code } } })),
+    (code: string) =>
+      toResult(client.GET('/resources/{code}', { params: { path: { code } } })),
     cacheKey,
   );
 
   const getResources = memoizeAsync(
-    (query?: paths["/resources"]["get"]["parameters"]["query"]) =>
-      toResult(client.GET("/resources", { params: query === undefined ? {} : { query } })),
+    (query?: paths['/resources']['get']['parameters']['query']) =>
+      toResult(
+        client.GET('/resources', {
+          params: query === undefined ? {} : { query },
+        }),
+      ),
     cacheKey,
   );
 
   const getMonster = memoizeAsync(
-    (code: string) => toResult(client.GET("/monsters/{code}", { params: { path: { code } } })),
+    (code: string) =>
+      toResult(client.GET('/monsters/{code}', { params: { path: { code } } })),
     cacheKey,
   );
 
   const getMonsters = memoizeAsync(
-    (query?: paths["/monsters"]["get"]["parameters"]["query"]) =>
-      toResult(client.GET("/monsters", { params: query === undefined ? {} : { query } })),
+    (query?: paths['/monsters']['get']['parameters']['query']) =>
+      toResult(
+        client.GET('/monsters', {
+          params: query === undefined ? {} : { query },
+        }),
+      ),
     cacheKey,
   );
 
   const cachedBankItems = memoizeAsyncWithTtl(
-    (query?: paths["/my/bank/items"]["get"]["parameters"]["query"]) =>
-      toResult(client.GET("/my/bank/items", { params: query === undefined ? {} : { query } })),
+    (query?: paths['/my/bank/items']['get']['parameters']['query']) =>
+      toResult(
+        client.GET('/my/bank/items', {
+          params: query === undefined ? {} : { query },
+        }),
+      ),
     cacheKey,
     BANK_ITEMS_CACHE_TTL_MS,
   );
-  const getBankItems = (query?: paths["/my/bank/items"]["get"]["parameters"]["query"]) =>
-    cachedBankItems(query);
+  const getBankItems = (
+    query?: paths['/my/bank/items']['get']['parameters']['query'],
+  ) => cachedBankItems(query);
 
   const cachedCharacterLogs = memoizeAsyncWithTtl(
-    (name: string, query?: paths["/my/logs/{name}"]["get"]["parameters"]["query"]) =>
-      toResult(client.GET("/my/logs/{name}", { params: { path: { name }, query: query ?? {} } })),
+    (
+      name: string,
+      query?: paths['/my/logs/{name}']['get']['parameters']['query'],
+    ) =>
+      toResult(
+        client.GET('/my/logs/{name}', {
+          params: { path: { name }, query: query ?? {} },
+        }),
+      ),
     cacheKey,
     CHARACTER_LOG_CACHE_TTL_MS,
   );
   const getCharacterLogs = (
     name: string,
-    query?: paths["/my/logs/{name}"]["get"]["parameters"]["query"],
+    query?: paths['/my/logs/{name}']['get']['parameters']['query'],
   ) => cachedCharacterLogs(name, query);
 
-  const moveCharacter = (name: string, destination: components["schemas"]["DestinationSchema"]) =>
+  const moveCharacter = (
+    name: string,
+    destination: components['schemas']['DestinationSchema'],
+  ) =>
     toResult(
-      client.POST("/my/{name}/action/move", {
+      client.POST('/my/{name}/action/move', {
         body: destination,
         params: { path: { name } },
       }),
     );
 
   const rest = (name: string) =>
-    toResult(client.POST("/my/{name}/action/rest", { params: { path: { name } } }));
+    toResult(
+      client.POST('/my/{name}/action/rest', { params: { path: { name } } }),
+    );
 
   const gather = (name: string) =>
-    toResult(client.POST("/my/{name}/action/gathering", { params: { path: { name } } }));
+    toResult(
+      client.POST('/my/{name}/action/gathering', {
+        params: { path: { name } },
+      }),
+    );
 
   const fight = (name: string, participants?: readonly string[]) =>
     toResult(
-      client.POST("/my/{name}/action/fight", {
+      client.POST('/my/{name}/action/fight', {
         body: participants ? { participants: [...participants] } : undefined,
         params: { path: { name } },
       }),
@@ -249,23 +297,26 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
 
   const craft = (name: string, code: string, quantity = 1) =>
     toResult(
-      client.POST("/my/{name}/action/crafting", {
+      client.POST('/my/{name}/action/crafting', {
         body: { code, quantity },
         params: { path: { name } },
       }),
     );
 
-  const equip = (name: string, items: components["schemas"]["EquipSchema"][]) =>
+  const equip = (name: string, items: components['schemas']['EquipSchema'][]) =>
     toResult(
-      client.POST("/my/{name}/action/equip", {
+      client.POST('/my/{name}/action/equip', {
         body: items,
         params: { path: { name } },
       }),
     );
 
-  const unequip = (name: string, items: components["schemas"]["UnequipSchema"][]) =>
+  const unequip = (
+    name: string,
+    items: components['schemas']['UnequipSchema'][],
+  ) =>
     toResult(
-      client.POST("/my/{name}/action/unequip", {
+      client.POST('/my/{name}/action/unequip', {
         body: items,
         params: { path: { name } },
       }),
@@ -274,18 +325,21 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
   const giveItems = (
     name: string,
     receiverCharacter: string,
-    items: components["schemas"]["SimpleItemSchema"][],
+    items: components['schemas']['SimpleItemSchema'][],
   ) =>
     toResult(
-      client.POST("/my/{name}/action/give/item", {
+      client.POST('/my/{name}/action/give/item', {
         body: { character: receiverCharacter, items },
         params: { path: { name } },
       }),
     );
 
-  const depositItems = (name: string, items: components["schemas"]["SimpleItemSchema"][]) =>
+  const depositItems = (
+    name: string,
+    items: components['schemas']['SimpleItemSchema'][],
+  ) =>
     toResult(
-      client.POST("/my/{name}/action/bank/deposit/item", {
+      client.POST('/my/{name}/action/bank/deposit/item', {
         body: items,
         params: { path: { name } },
       }),
@@ -294,9 +348,12 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
       return response;
     });
 
-  const withdrawItems = (name: string, items: components["schemas"]["SimpleItemSchema"][]) =>
+  const withdrawItems = (
+    name: string,
+    items: components['schemas']['SimpleItemSchema'][],
+  ) =>
     toResult(
-      client.POST("/my/{name}/action/bank/withdraw/item", {
+      client.POST('/my/{name}/action/bank/withdraw/item', {
         body: items,
         params: { path: { name } },
       }),
@@ -307,7 +364,7 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
 
   const depositGold = (name: string, quantity: number) =>
     toResult(
-      client.POST("/my/{name}/action/bank/deposit/gold", {
+      client.POST('/my/{name}/action/bank/deposit/gold', {
         body: { quantity },
         params: { path: { name } },
       }),
@@ -315,7 +372,7 @@ export const createArtifactsClient = (token: string = env.ARTIFACTS_TOKEN) => {
 
   const withdrawGold = (name: string, quantity: number) =>
     toResult(
-      client.POST("/my/{name}/action/bank/withdraw/gold", {
+      client.POST('/my/{name}/action/bank/withdraw/gold', {
         body: { quantity },
         params: { path: { name } },
       }),
