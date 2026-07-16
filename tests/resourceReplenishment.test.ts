@@ -126,6 +126,65 @@ describe('planResourceReplenishment', () => {
     });
   });
 
+  it('waits for an active bank withdrawal before evaluating replenishment', () => {
+    const reservation = buildReservation({
+      activity: { itemCode: 'copper_ore', quantity: 1, type: 'withdrawItem' },
+      consumes: [{ itemCode: 'copper_ore', quantity: 1 }],
+    });
+    const state = buildState({ reservations: [reservation] });
+    const snapshot = buildSnapshot({
+      bank: [{ code: 'copper_ore', quantity: 50 }],
+    });
+
+    const result = planResourceReplenishment(snapshot, state, buildResource());
+
+    expect(result.isOk() && result.value).toEqual({ activities: [], state });
+  });
+
+  it('can replenish for a withdrawal proposed in the current decision', () => {
+    const proposal = buildReservation({
+      activity: { itemCode: 'copper_ore', quantity: 1, type: 'withdrawItem' },
+      consumes: [{ itemCode: 'copper_ore', quantity: 1 }],
+    });
+    const state = buildState({ reservations: [proposal] });
+    const snapshot = buildSnapshot({
+      bank: [{ code: 'copper_ore', quantity: 50 }],
+    });
+
+    const result = planResourceReplenishment(
+      snapshot,
+      state,
+      buildResource(),
+      [],
+    );
+
+    expect(result.isOk() && result.value.activities).toEqual([
+      {
+        activity: { resourceCode: 'copper_rocks', type: 'farmResource' },
+        characterName: 'Stan',
+        consumes: [],
+        goalId: 'replenish-copper',
+        produces: [{ itemCode: 'copper_ore' }],
+      },
+    ]);
+  });
+
+  it('waits while another Goal produces the target bank item', () => {
+    const state = buildState({
+      reservations: [
+        buildReservation({ produces: [{ itemCode: 'copper_ore' }] }),
+      ],
+    });
+
+    const result = planResourceReplenishment(
+      buildSnapshot(),
+      state,
+      buildResource(),
+    );
+
+    expect(result.isOk() && result.value).toEqual({ activities: [], state });
+  });
+
   it('keeps an active Goal reserved even when its target is now satisfied', () => {
     const reservation = buildReservation({
       activity: { resourceCode: 'copper_rocks', type: 'farmResource' },

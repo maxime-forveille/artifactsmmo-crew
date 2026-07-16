@@ -178,7 +178,7 @@ describe('createConfiguredGoalPlanner', () => {
           characterName: 'Stan',
           consumes: [],
           goalId: 'equip-stan-dagger',
-          produces: [{ itemCode: 'copper_dagger' }],
+          produces: [{ itemCode: 'copper_dagger', quantity: 1 }],
         },
         {
           activity: { resourceCode: 'copper_rocks', type: 'farmResource' },
@@ -186,6 +186,156 @@ describe('createConfiguredGoalPlanner', () => {
           consumes: [],
           goalId: 'goal-copper',
           produces: [{ itemCode: 'copper_ore' }],
+        },
+      ],
+      state,
+    });
+  });
+
+  it('does not reserve the same bank stock for simultaneous equipment Goals', () => {
+    const stanGoal = buildEquipmentGoal();
+    const kyleGoal: EquipItemGoal = {
+      characterName: 'Kyle',
+      id: 'equip-kyle-sword',
+      itemCode: 'copper_sword',
+      type: 'equipItem',
+    };
+    const dagger = {
+      ...buildItem(),
+      craft: {
+        items: [{ code: 'copper_bar', quantity: 2 }],
+        level: 5,
+        quantity: 1,
+        skill: 'weaponcrafting' as const,
+      },
+    };
+    const sword = { ...dagger, code: 'copper_sword' };
+    const state = buildState([stanGoal, kyleGoal]);
+    const planner = createConfiguredGoalPlanner(
+      [
+        { goalId: stanGoal.id, item: dagger },
+        { goalId: kyleGoal.id, item: sword },
+      ],
+      [],
+    );
+    const snapshot = {
+      ...buildSnapshot([{ code: 'copper_bar', quantity: 2 }]),
+      characters: [buildCharacter('Stan'), buildCharacter('Kyle')],
+    };
+
+    const result = planner(snapshot, state);
+
+    expect(result._unsafeUnwrap()).toEqual({
+      activities: [
+        {
+          activity: {
+            itemCode: 'copper_bar',
+            quantity: 2,
+            type: 'withdrawItem',
+          },
+          characterName: 'Stan',
+          consumes: [{ itemCode: 'copper_bar', quantity: 2 }],
+          goalId: 'equip-stan-dagger',
+          produces: [],
+        },
+      ],
+      state,
+    });
+  });
+
+  it('replenishes stock reserved by a higher-priority equipment Goal', () => {
+    const equipmentGoal = buildEquipmentGoal();
+    const replenishGoal = {
+      ...buildGoal('replenish-bars', 'copper_bar'),
+      minimumBankQuantity: 2,
+    };
+    const item = {
+      ...buildItem(),
+      craft: {
+        items: [{ code: 'copper_bar', quantity: 2 }],
+        level: 5,
+        quantity: 1,
+        skill: 'weaponcrafting' as const,
+      },
+    };
+    const barResource = buildResource('copper_rocks', 'copper_bar', 'mining');
+    const state = buildState([equipmentGoal, replenishGoal]);
+    const planner = createConfiguredGoalPlanner(
+      [{ goalId: equipmentGoal.id, item }],
+      [{ goalId: replenishGoal.id, resource: barResource }],
+    );
+    const snapshot = {
+      ...buildSnapshot([{ code: 'copper_bar', quantity: 2 }]),
+      characters: [buildCharacter('Stan'), buildCharacter('Kyle')],
+    };
+
+    const result = planner(snapshot, state);
+
+    expect(result._unsafeUnwrap()).toEqual({
+      activities: [
+        {
+          activity: {
+            itemCode: 'copper_bar',
+            quantity: 2,
+            type: 'withdrawItem',
+          },
+          characterName: 'Stan',
+          consumes: [{ itemCode: 'copper_bar', quantity: 2 }],
+          goalId: 'equip-stan-dagger',
+          produces: [],
+        },
+        {
+          activity: { resourceCode: 'copper_rocks', type: 'farmResource' },
+          characterName: 'Kyle',
+          consumes: [],
+          goalId: 'replenish-bars',
+          produces: [{ itemCode: 'copper_bar' }],
+        },
+      ],
+      state,
+    });
+  });
+
+  it('preserves a satisfied bank Goal consumed by lower-priority work', () => {
+    const equipmentGoal = buildEquipmentGoal();
+    const replenishGoal = {
+      ...buildGoal('replenish-bars', 'copper_bar'),
+      minimumBankQuantity: 2,
+    };
+    const item = {
+      ...buildItem(),
+      craft: {
+        items: [{ code: 'copper_bar', quantity: 2 }],
+        level: 5,
+        quantity: 1,
+        skill: 'weaponcrafting' as const,
+      },
+    };
+    const barResource = buildResource('copper_rocks', 'copper_bar', 'mining');
+    const state = buildState([replenishGoal, equipmentGoal]);
+    const planner = createConfiguredGoalPlanner(
+      [{ goalId: equipmentGoal.id, item }],
+      [{ goalId: replenishGoal.id, resource: barResource }],
+    );
+    const snapshot = {
+      ...buildSnapshot([{ code: 'copper_bar', quantity: 2 }]),
+      characters: [buildCharacter('Stan'), buildCharacter('Kyle')],
+    };
+
+    const result = planner(snapshot, state);
+
+    expect(result._unsafeUnwrap()).toEqual({
+      activities: [
+        {
+          activity: {
+            itemCode: 'copper_bar',
+            quantity: 2,
+            type: 'withdrawItem',
+          },
+          characterName: 'Stan',
+          consumes: [{ itemCode: 'copper_bar', quantity: 2 }],
+          goalId: 'equip-stan-dagger',
+          produces: [],
         },
       ],
       state,

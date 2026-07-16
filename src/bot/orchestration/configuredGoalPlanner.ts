@@ -13,6 +13,7 @@ import type {
   ActivityAssignment,
   OrchestratorState,
 } from './orchestratorState.js';
+import { reservedBankWithdrawalQuantity } from './reservationIntents.js';
 import {
   planResourceReplenishment,
   type Resource,
@@ -65,6 +66,44 @@ export type ConfiguredGoalPlanner = (
   state: OrchestratorState,
   previousOutcome?: PreviousActivityOutcome,
 ) => Result<ConfiguredGoalPlan, ConfiguredGoalPlannerError>;
+
+const bankQuantity = (snapshot: CrewSnapshot, itemCode: string): number =>
+  snapshot.bank
+    .filter((item) => item.code === itemCode)
+    .reduce((total, item) => total + item.quantity, 0);
+
+const plannedBankWithdrawalQuantity = (
+  activities: readonly ActivityAssignment[],
+  itemCode: string,
+): number =>
+  activities.reduce(
+    (total, assignment) =>
+      assignment.activity.type === 'withdrawItem' &&
+      assignment.activity.itemCode === itemCode
+        ? total + assignment.activity.quantity
+        : total,
+    0,
+  );
+
+const isCompletedGoalStillSatisfied = (
+  snapshot: CrewSnapshot,
+  state: OrchestratorState,
+  activities: readonly ActivityAssignment[],
+  goal: OrchestratorState['goals'][number],
+): boolean => {
+  if (goal.type !== 'replenishBankItem') {
+    return true;
+  }
+
+  const projectedQuantity = Math.max(
+    bankQuantity(snapshot, goal.itemCode) -
+      reservedBankWithdrawalQuantity(state, goal.itemCode) -
+      plannedBankWithdrawalQuantity(activities, goal.itemCode),
+    0,
+  );
+
+  return projectedQuantity >= goal.minimumBankQuantity;
+};
 
 /**
  * Plans every configured Goal in global priority order. Proposed assignments
@@ -132,7 +171,12 @@ export const createConfiguredGoalPlanner = (
 
               return resource === undefined
                 ? err(new GoalResourceNotResolvedError(goal.id))
-                : planResourceReplenishment(snapshot, planningState, resource);
+                : planResourceReplenishment(
+                    snapshot,
+                    planningState,
+                    resource,
+                    state.reservations,
+                  );
             })();
 
       if (planned.isErr()) {
@@ -150,7 +194,11 @@ export const createConfiguredGoalPlanner = (
     return ok({
       activities,
       state: {
-        goals: state.goals.filter((goal) => !completedGoalIds.has(goal.id)),
+        goals: state.goals.filter(
+          (goal) =>
+            !completedGoalIds.has(goal.id) ||
+            !isCompletedGoalStillSatisfied(snapshot, state, activities, goal),
+        ),
         reservations: state.reservations,
       },
     });

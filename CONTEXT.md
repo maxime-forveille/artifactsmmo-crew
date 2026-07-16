@@ -32,7 +32,8 @@ _Avoid_: Task runner, activity executor
 
 **Reservation**:
 A plain-data record of an activity already running for a character, including
-what it intends to produce or consume so another decision does not duplicate it.
+what it intends to produce or consume and exact quantities when they are known,
+so another decision does not duplicate or over-allocate that work.
 _Avoid_: Running promise, lock
 
 **Blocker**:

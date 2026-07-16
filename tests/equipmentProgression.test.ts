@@ -166,7 +166,7 @@ describe('planEquipmentProgression', () => {
         {
           activity: { itemCode: 'copper_dagger', type: 'equipItem' },
           characterName: 'Stan',
-          consumes: [{ itemCode: 'copper_dagger' }],
+          consumes: [{ itemCode: 'copper_dagger', quantity: 1 }],
           goalId: 'equip-stan-dagger',
           produces: [],
         },
@@ -195,7 +195,7 @@ describe('planEquipmentProgression', () => {
           characterName: 'Stan',
           consumes: [],
           goalId: 'equip-stan-dagger',
-          produces: [{ itemCode: 'copper_dagger' }],
+          produces: [{ itemCode: 'copper_dagger', quantity: 1 }],
         },
       ],
       state,
@@ -280,13 +280,36 @@ describe('planEquipmentProgression', () => {
             type: 'withdrawItem',
           },
           characterName: 'Stan',
-          consumes: [{ itemCode: 'copper_dagger' }],
+          consumes: [{ itemCode: 'copper_dagger', quantity: 1 }],
           goalId: 'equip-stan-dagger',
           produces: [],
         },
       ],
       state,
     });
+  });
+
+  it('waits when the observed target is reserved for another withdrawal', () => {
+    const state = buildState({
+      reservations: [
+        buildReservation({
+          activity: {
+            itemCode: 'copper_dagger',
+            quantity: 1,
+            type: 'withdrawItem',
+          },
+          characterName: 'Kyle',
+          consumes: [{ itemCode: 'copper_dagger', quantity: 1 }],
+        }),
+      ],
+    });
+    const result = planEquipmentProgression(
+      buildSnapshot({ bank: [{ code: 'copper_dagger', quantity: 1 }] }),
+      state,
+      buildItem(),
+    );
+
+    expect(result._unsafeUnwrap()).toEqual({ activities: [], state });
   });
 
   it('withdraws a missing recipe material before crafting the target', () => {
@@ -306,7 +329,7 @@ describe('planEquipmentProgression', () => {
             type: 'withdrawItem',
           },
           characterName: 'Stan',
-          consumes: [{ itemCode: 'copper_bar' }],
+          consumes: [{ itemCode: 'copper_bar', quantity: 2 }],
           goalId: 'equip-stan-dagger',
           produces: [],
         },
@@ -333,6 +356,125 @@ describe('planEquipmentProgression', () => {
       quantity: 1,
       type: 'withdrawItem',
     });
+  });
+
+  it('withdraws only material stock not consumed by another Reservation', () => {
+    const state = buildState({
+      reservations: [
+        buildReservation({
+          activity: {
+            itemCode: 'copper_bar',
+            quantity: 2,
+            type: 'withdrawItem',
+          },
+          characterName: 'Kyle',
+          consumes: [{ itemCode: 'copper_bar', quantity: 2 }],
+        }),
+      ],
+    });
+    const result = planEquipmentProgression(
+      buildSnapshot({ bank: [{ code: 'copper_bar', quantity: 3 }] }),
+      state,
+      buildItem(),
+    );
+
+    expect(result._unsafeUnwrap().activities[0]).toMatchObject({
+      activity: { itemCode: 'copper_bar', quantity: 1, type: 'withdrawItem' },
+      consumes: [{ itemCode: 'copper_bar', quantity: 1 }],
+    });
+  });
+
+  it('waits when all observed material stock is reserved for withdrawal', () => {
+    const state = buildState({
+      reservations: [
+        buildReservation({
+          activity: {
+            itemCode: 'copper_bar',
+            quantity: 2,
+            type: 'withdrawItem',
+          },
+          characterName: 'Kyle',
+          consumes: [{ itemCode: 'copper_bar', quantity: 2 }],
+        }),
+      ],
+    });
+    const result = planEquipmentProgression(
+      buildSnapshot({ bank: [{ code: 'copper_bar', quantity: 2 }] }),
+      state,
+      buildItem(),
+    );
+
+    expect(result._unsafeUnwrap()).toEqual({ activities: [], state });
+  });
+
+  it('waits when reserved withdrawals exceed the observed material stock', () => {
+    const state = buildState({
+      reservations: [
+        buildReservation({
+          activity: {
+            itemCode: 'copper_bar',
+            quantity: 2,
+            type: 'withdrawItem',
+          },
+          characterName: 'Kyle',
+          consumes: [{ itemCode: 'copper_bar', quantity: 2 }],
+        }),
+      ],
+    });
+    const result = planEquipmentProgression(
+      buildSnapshot({ bank: [{ code: 'copper_bar', quantity: 1 }] }),
+      state,
+      buildItem(),
+    );
+
+    expect(result._unsafeUnwrap()).toEqual({ activities: [], state });
+  });
+
+  it('waits for a reserved material withdrawal after bank stock changed', () => {
+    const state = buildState({
+      reservations: [
+        buildReservation({
+          activity: {
+            itemCode: 'copper_bar',
+            quantity: 2,
+            type: 'withdrawItem',
+          },
+          characterName: 'Kyle',
+          consumes: [{ itemCode: 'copper_bar', quantity: 2 }],
+        }),
+      ],
+    });
+
+    const result = planEquipmentProgression(
+      buildSnapshot(),
+      state,
+      buildItem(),
+    );
+
+    expect(result._unsafeUnwrap()).toEqual({ activities: [], state });
+  });
+
+  it('waits while another Reservation produces a missing material', () => {
+    const state = buildState({
+      reservations: [
+        buildReservation({
+          characterName: 'Kyle',
+          produces: [{ itemCode: 'copper_bar' }],
+        }),
+      ],
+    });
+    const copperBar = buildItem({ code: 'copper_bar' });
+
+    const result = planEquipmentProgression(
+      buildSnapshot(),
+      state,
+      buildItem(),
+      undefined,
+      [],
+      [copperBar],
+    );
+
+    expect(result._unsafeUnwrap()).toEqual({ activities: [], state });
   });
 
   it('does not acquire a recipe material already held in full', () => {
@@ -523,7 +665,7 @@ describe('planEquipmentProgression', () => {
         characterName: 'Kyle',
         consumes: [],
         goalId: 'equip-stan-dagger',
-        produces: [{ itemCode: 'copper_bar' }],
+        produces: [{ itemCode: 'copper_bar', quantity: 2 }],
       },
     ]);
   });
@@ -555,7 +697,7 @@ describe('planEquipmentProgression', () => {
         characterName: 'Kyle',
         consumes: [],
         goalId: 'equip-stan-dagger',
-        produces: [{ itemCode: 'copper_bar' }],
+        produces: [{ itemCode: 'copper_bar', quantity: 2 }],
       },
     ]);
   });
@@ -758,10 +900,9 @@ describe('planEquipmentProgression', () => {
       [copperBar, copperOre],
     );
 
-    expect(result._unsafeUnwrap().activities[0]?.activity).toEqual({
-      itemCode: 'copper_bar',
-      quantity: 1,
-      type: 'craftItem',
+    expect(result._unsafeUnwrap().activities[0]).toMatchObject({
+      activity: { itemCode: 'copper_bar', quantity: 1, type: 'craftItem' },
+      produces: [{ itemCode: 'copper_bar', quantity: 2 }],
     });
   });
 
@@ -1555,9 +1696,8 @@ describe('planEquipmentProgression', () => {
   });
 
   it('uses equip to expose a missing-item Blocker for a non-craftable target', () => {
-    const item = buildItem();
     const state = buildState();
-    delete item.craft;
+    const item = buildRawItem('copper_dagger');
 
     const result = planEquipmentProgression(buildSnapshot(), state, item);
 
@@ -1566,7 +1706,7 @@ describe('planEquipmentProgression', () => {
         {
           activity: { itemCode: 'copper_dagger', type: 'equipItem' },
           characterName: 'Stan',
-          consumes: [{ itemCode: 'copper_dagger' }],
+          consumes: [{ itemCode: 'copper_dagger', quantity: 1 }],
           goalId: 'equip-stan-dagger',
           produces: [],
         },

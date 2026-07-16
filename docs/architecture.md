@@ -174,9 +174,10 @@ resource until an explicit bank threshold is reached.
 `orchestration/orchestratorState.ts` defines crew-level Goals in explicit
 priority order and serializable Activity assignments. Each assignment
 identifies its Goal, character, Activity, and intended item production or
-consumption. It becomes a Reservation only after the runtime starts that
-Activity successfully; runtime promises and cancellation handles remain
-outside orchestration state.
+consumption. Intents include exact quantities when an Activity can know them;
+bounded gathering and hunting outputs remain unquantified. An assignment
+becomes a Reservation only after the runtime starts that Activity successfully;
+runtime promises and cancellation handles remain outside orchestration state.
 
 `orchestration/resourceReplenishment.ts` completes a satisfied unreserved bank
 Goal, avoids work already reserved, excludes busy characters, and otherwise
@@ -188,8 +189,12 @@ assigns an eligible gatherer or safe hunter for a uniquely sourced raw material,
 crafts intermediates in dependency order, crafts the target, equips it, and then
 completes the Goal. The target character crafts when eligible; otherwise the
 highest-skilled idle crafter performs the step and deposits its output into
-shared storage for the next consumer. Busy holders and crafters cause the Goal
-to wait. Profession-level Blockers remain for a later planner layer to turn into
+shared storage for the next consumer. The planner subtracts quantities reserved
+by in-flight withdrawals from observed bank stock. Replenishment waits for
+active withdrawals to settle, while withdrawals proposed in the current pure
+decision can trigger parallel replenishment. Matching production already in
+flight, busy holders, and busy crafters also cause the Goal to wait.
+Profession-level Blockers remain for a later planner layer to turn into
 profession progression work.
 
 `orchestration/configuredGoalPlanner.ts` applies both transitions in global

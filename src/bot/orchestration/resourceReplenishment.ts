@@ -10,6 +10,11 @@ import type {
   OrchestratorState,
   ReplenishBankItemGoal,
 } from './orchestratorState.js';
+import {
+  isBankWithdrawalReserved,
+  isItemProductionReserved,
+  reservedBankWithdrawalQuantity,
+} from './reservationIntents.js';
 
 export type Resource = Readonly<components['schemas']['ResourceSchema']>;
 type Character = CrewSnapshot['characters'][number];
@@ -47,6 +52,17 @@ const bankQuantity = (snapshot: CrewSnapshot, itemCode: string): number =>
   snapshot.bank
     .filter((item) => item.code === itemCode)
     .reduce((total, item) => total + item.quantity, 0);
+
+const availableBankQuantity = (
+  snapshot: CrewSnapshot,
+  state: OrchestratorState,
+  itemCode: string,
+): number =>
+  Math.max(
+    bankQuantity(snapshot, itemCode) -
+      reservedBankWithdrawalQuantity(state, itemCode),
+    0,
+  );
 
 export const findBestGatherer = (
   snapshot: CrewSnapshot,
@@ -111,6 +127,7 @@ export const planResourceReplenishment = (
   snapshot: CrewSnapshot,
   state: OrchestratorState,
   resource: Resource,
+  activeReservations: readonly ActivityAssignment[] = state.reservations,
 ): Result<ResourceReplenishmentPlan, ResourceReplenishmentError> => {
   const goal = state.goals[0];
 
@@ -130,11 +147,24 @@ export const planResourceReplenishment = (
     return ok(unchangedPlan(state));
   }
 
-  if (bankQuantity(snapshot, goal.itemCode) >= goal.minimumBankQuantity) {
+  if (
+    availableBankQuantity(snapshot, state, goal.itemCode) >=
+    goal.minimumBankQuantity
+  ) {
     return ok({
       activities: [],
       state: { goals: state.goals.slice(1), reservations: state.reservations },
     });
+  }
+
+  if (isItemProductionReserved(state, goal.itemCode)) {
+    return ok(unchangedPlan(state));
+  }
+
+  const activeState = { goals: state.goals, reservations: activeReservations };
+
+  if (isBankWithdrawalReserved(activeState, goal.itemCode)) {
+    return ok(unchangedPlan(state));
   }
 
   const resourceValidation = validateResource(goal, resource);

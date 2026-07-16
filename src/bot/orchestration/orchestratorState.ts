@@ -16,7 +16,11 @@ export type ReplenishBankItemGoal = Readonly<{
 
 export type Goal = EquipItemGoal | ReplenishBankItemGoal;
 
-export type ItemIntent = Readonly<{ itemCode: string }>;
+export type ItemIntent = Readonly<{
+  itemCode: string;
+  /** Absent when an Activity's bounded output cannot be known in advance. */
+  quantity?: number;
+}>;
 
 export type ActivityAssignment<TActivity extends Activity = Activity> =
   Readonly<{

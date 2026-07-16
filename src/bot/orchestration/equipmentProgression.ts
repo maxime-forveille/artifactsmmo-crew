@@ -17,8 +17,14 @@ import { craftSkillLevel } from '../progression.js';
 import type { CrewSnapshot } from './crewSnapshot.js';
 import type {
   ActivityAssignment,
+  ItemIntent,
   OrchestratorState,
 } from './orchestratorState.js';
+import {
+  isBankWithdrawalReserved,
+  isItemProductionReserved,
+  reservedBankWithdrawalQuantity,
+} from './reservationIntents.js';
 import {
   findBestGatherer,
   NoEligibleGathererError,
@@ -104,6 +110,17 @@ const bankQuantity = (snapshot: CrewSnapshot, itemCode: string): number =>
     .filter((item) => item.code === itemCode)
     .reduce((total, item) => total + item.quantity, 0);
 
+const availableBankQuantity = (
+  snapshot: CrewSnapshot,
+  state: OrchestratorState,
+  itemCode: string,
+): number =>
+  Math.max(
+    bankQuantity(snapshot, itemCode) -
+      reservedBankWithdrawalQuantity(state, itemCode),
+    0,
+  );
+
 const unchangedPlan = (state: OrchestratorState): EquipmentProgressionPlan => ({
   activities: [],
   state,
@@ -112,8 +129,8 @@ const unchangedPlan = (state: OrchestratorState): EquipmentProgressionPlan => ({
 type EquipmentStep = Readonly<{
   activity: EquipmentActivity;
   characterName: string;
-  consumes: readonly { itemCode: string }[];
-  produces: readonly { itemCode: string }[];
+  consumes: readonly ItemIntent[];
+  produces: readonly ItemIntent[];
 }>;
 
 type ItemProgress =
@@ -240,7 +257,7 @@ const depositStep = (
   activity: { itemCode, quantity, type: 'depositItem' },
   characterName,
   consumes: [],
-  produces: [{ itemCode }],
+  produces: [{ itemCode, quantity }],
 });
 
 const withdrawStep = (
@@ -250,7 +267,7 @@ const withdrawStep = (
 ): EquipmentStep => ({
   activity: { itemCode, quantity, type: 'withdrawItem' },
   characterName,
-  consumes: [{ itemCode }],
+  consumes: [{ itemCode, quantity }],
   produces: [],
 });
 
@@ -258,11 +275,12 @@ const craftStep = (
   characterName: string,
   itemCode: string,
   quantity: number,
+  producedQuantity: number,
 ): EquipmentStep => ({
   activity: { itemCode, quantity, type: 'craftItem' },
   characterName,
   consumes: [],
-  produces: [{ itemCode }],
+  produces: [{ itemCode, quantity: producedQuantity }],
 });
 
 const findBestItemHolder = (
@@ -368,6 +386,10 @@ const planHeldItem = (
     return ok({ status: 'waiting' });
   }
 
+  if (isItemProductionReserved(state, item.code)) {
+    return ok({ status: 'waiting' });
+  }
+
   if (craftingSkill === undefined) {
     const resolvedSource = sourcesByItemCode.get(item.code);
 
@@ -381,9 +403,9 @@ const planHeldItem = (
     );
   }
 
-  const craftQuantity = Math.ceil(
-    missingQuantity / (item.craft?.quantity ?? 1),
-  );
+  const recipeQuantity = item.craft?.quantity ?? 1;
+  const craftQuantity = Math.ceil(missingQuantity / recipeQuantity);
+  const producedQuantity = craftQuantity * recipeQuantity;
   const requiredCraftingLevel = item.craft?.level ?? 0;
   const eligibleCrafter = findBestCrafter(
     snapshot,
@@ -395,7 +417,12 @@ const planHeldItem = (
   if (eligibleCrafter === undefined) {
     return ok({
       status: 'step',
-      step: craftStep(character.name, item.code, craftQuantity),
+      step: craftStep(
+        character.name,
+        item.code,
+        craftQuantity,
+        producedQuantity,
+      ),
     });
   }
 
@@ -424,9 +451,14 @@ const planHeldItem = (
       continue;
     }
 
+    const availableMaterialQuantity = availableBankQuantity(
+      snapshot,
+      state,
+      material.code,
+    );
     const bankedMaterialQuantity = Math.min(
       missingMaterialQuantity,
-      bankQuantity(snapshot, material.code),
+      availableMaterialQuantity,
     );
 
     if (bankedMaterialQuantity > 0) {
@@ -434,6 +466,10 @@ const planHeldItem = (
         status: 'step',
         step: withdrawStep(crafter.name, material.code, bankedMaterialQuantity),
       });
+    }
+
+    if (isBankWithdrawalReserved(state, material.code)) {
+      return ok({ status: 'waiting' });
     }
 
     const materialItem = itemsByCode.get(material.code);
@@ -471,7 +507,7 @@ const planHeldItem = (
 
   return ok({
     status: 'step',
-    step: craftStep(crafter.name, item.code, craftQuantity),
+    step: craftStep(crafter.name, item.code, craftQuantity, producedQuantity),
   });
 };
 
@@ -552,7 +588,7 @@ export const planEquipmentProgression = (
         {
           activity: { itemCode: item.code, type: 'equipItem' },
           characterName: character.name,
-          consumes: [{ itemCode: item.code }],
+          consumes: [{ itemCode: item.code, quantity: 1 }],
           goalId: goal.id,
           produces: [],
         },
@@ -561,26 +597,30 @@ export const planEquipmentProgression = (
     });
   }
 
-  if (bankQuantity(snapshot, item.code) > 0) {
+  if (availableBankQuantity(snapshot, state, item.code) > 0) {
     return ok({
       activities: [
         {
           activity: { itemCode: item.code, quantity: 1, type: 'withdrawItem' },
           characterName: character.name,
-          consumes: [{ itemCode: item.code }],
+          consumes: [{ itemCode: item.code, quantity: 1 }],
           goalId: goal.id,
           produces: [],
         },
       ],
       state,
     });
+  }
+
+  if (isBankWithdrawalReserved(state, item.code)) {
+    return ok(unchangedPlan(state));
   }
 
   if (item.craft?.skill === undefined) {
     const step: EquipmentStep = {
       activity: { itemCode: item.code, type: 'equipItem' },
       characterName: character.name,
-      consumes: [{ itemCode: item.code }],
+      consumes: [{ itemCode: item.code, quantity: 1 }],
       produces: [],
     };
 
@@ -621,7 +661,7 @@ export const planEquipmentProgression = (
   const step: EquipmentStep =
     progress.value.status === 'step'
       ? progress.value.step
-      : craftStep(character.name, item.code, 1);
+      : craftStep(character.name, item.code, 1, item.craft?.quantity ?? 1);
 
   return ok({ activities: [{ ...step, goalId: goal.id }], state });
 };

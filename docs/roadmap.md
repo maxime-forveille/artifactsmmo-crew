@@ -65,6 +65,7 @@ new orchestration Interface.
 - [x] Keep runtime promises and cancellation handles outside state.
 - [x] Define pure state transitions for Activity completion and Blockers.
 - [x] Use crew-level Goals ordered explicitly by priority.
+- [x] Track known item quantities in Reservations to avoid over-allocation.
 
 ### 2. Activity execution
 
