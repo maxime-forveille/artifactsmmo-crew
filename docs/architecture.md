@@ -9,7 +9,10 @@ See [`../CONTEXT.md`](../CONTEXT.md) for the project vocabulary.
 - TypeScript ESM, functional and declarative.
 - Errors are explicit through `Result`/`ResultAsync`.
 - Game Actions stay behind bounded Activities.
+- Goals are finite milestones with observable completion conditions.
+- Permanent progression comes from automatic Goal proposal, not infinite Goals.
 - Decisions observe state but do not perform Actions.
+- Strategic rule priority is configurable; safety invariants are not.
 - The runtime schedules, retries, and cancels without owning policy.
 - Live game data is preferred over duplicated local state.
 
@@ -143,34 +146,95 @@ type Activity =
   | { type: 'withdrawItem'; itemCode: string; quantity: number };
 ```
 
-Activities are complete operational cycles, not individual game Actions:
+Activities are operationally bounded workflows, not permanent instructions:
 
-- `farmResource`: move, gather until full, then bank;
-- `huntMonster`: move, fight/rest until full, then bank;
-- `craftItem`: validate held inputs, move to the workshop, and craft;
-- `depositItem`: validate held stock, move to the bank, and deposit only the
+- `farmResource`: currently moves, gathers until full, then banks;
+- `huntMonster`: currently moves, fights/rests until full, then banks;
+- `craftItem`: validates held inputs, moves to the workshop, and crafts;
+- `depositItem`: validates held stock, moves to the bank, and deposits only the
   requested item quantity;
-- `equipItem`: replace the current slot occupant with one held target;
-- `withdrawItem`: validate bank stock and inventory room, then retrieve an item.
+- `equipItem`: replaces the current slot occupant with one held target;
+- `withdrawItem`: validates bank stock and inventory room, then retrieves an
+  item.
 
 Movement, gathering, fighting, resting, withdrawing, and depositing remain
-individual Actions. Targeted banking Activities wrap those Actions in bounded,
-scheduler-visible operational cycles.
+individual Actions. The current farming and hunting Activities are transitional
+super-Activities: they hide storage and delayed re-evaluation behind a full
+inventory cycle. The target model separates short gathering/combat chunks from
+inventory storage, with an operational action limit and early return on level-up
+or full inventory. This keeps policy responsive without refreshing a full Crew
+Snapshot after every single Action.
 
-Farming and hunting expose bounded cycles. Targeted crafting and equipping
+Targeted crafting and equipping
 return typed Blockers for missing inputs, insufficient levels, invalid recipes,
 and unsupported slots; neither acquires prerequisites recursively. The legacy
 `craftAndEquip` workflow remains recursive only for transitional tasks.
 
 ## Orchestration model
 
-The target decision model is a pure state transition:
+The target model has two pure decision transitions:
 
 ```text
-CrewSnapshot + OrchestratorState
-              ↓
-proposed Activities + next OrchestratorState
+CrewSnapshot + WorldKnowledge + OrchestratorState + GoalPolicy
+                              ↓
+                 Goal Proposals + next Goals
+                              ↓
+              proposed Activities + next OrchestratorState
 ```
+
+Goals remain finite. Autonomous MMO progression is the repeated process of
+completing one measurable Goal, observing the result, and automatically
+proposing the next useful Goal. The design does not introduce infinite Goals or
+manually selected Directives.
+
+### Autonomous Goal policy
+
+`createGoalPolicy` builds the pure Goal Policy from validated strategic
+configuration and a registry of named Goal Rules. The resulting `proposeGoals`
+function is the policy façade called by orchestration. Its implementation stays
+split into three test seams:
+
+1. `discoverGoalCandidates` runs Goal Rules against observed state and world
+   knowledge;
+2. `rankGoalCandidates` applies configured rule order, then utility and a stable
+   deterministic tie-breaker;
+3. `selectCompatibleGoals` selects compatible Goal Candidates and produces Goal
+   Proposals, excluding conflicts over characters, Reservations, active Goals,
+   or shared resources.
+
+Each `GoalCandidate` records its proposed finite Goal, originating Goal Rule,
+reason, and optional utility evidence. A selected `GoalProposal` is not an
+Activity and performs no game operation; it becomes a persistent Goal only when
+accepted into orchestrator state.
+
+Goal Rules represent strategic opportunity families such as
+`equipmentUpgrade`, `combatProgression`, `professionProgression`,
+`gatheringProgression`, `bankReplenishment`, and `bankSurplusProcessing`. Their
+order belongs in `orchestration.json`, allowing strategy changes without code
+changes. A rule may calculate utility within its own family from observed
+XP/time, equipment gain, estimated duration, material cost, or future market
+cost. Initial policy should use deterministic rule order before adding tunable
+weights.
+
+Correctness constraints are evaluated outside configurable rule order. Safety,
+Reservation exclusivity, bank quantity protection, one Activity per character,
+cooldowns, and irreversible-item protections cannot be demoted by configuration.
+Priority tiers are:
+
+1. explicit one-shot human overrides;
+2. prerequisite Goals that unblock an already committed Goal;
+3. autonomous Goal Proposals ranked by configured Goal Rule order.
+
+The policy expands prerequisite cascades one observed layer at a time rather
+than speculating a complete tree. A blocked equipment Goal can propose a finite
+profession-level Goal; that Goal can later propose a resource Goal. Completing a
+prerequisite resumes its preserved parent Goal. Stable semantic IDs prevent the
+same Goal from being proposed twice and persistent Goals prevent policy from
+oscillating on every snapshot.
+
+`WorldKnowledge` provides cached items, monsters, resources, recipes, and later
+market observations as explicit policy input. Goal Rules remain pure and never
+fetch their own data.
 
 `orchestration/crewSnapshot.ts` reads all characters and every bank page into a
 deterministic read-only value. The game has no atomic account-snapshot
@@ -220,9 +284,11 @@ cancelled Activity releases only that character's Reservation while preserving
 all Goals for the next snapshot and policy decision. Transient Failures bypass
 the terminal transition so the runtime can retry the same reserved Activity.
 
-The final orchestrator will emit Activities instead of `autoXXX` tasks.
-Persistent Goals will survive across several Activities while Reservations
-record work already in flight.
+The final orchestrator will automatically propose finite Goals and emit bounded
+Activities instead of `autoXXX` tasks. Persistent Goals survive across several
+Activities while Reservations record work already in flight. When a Goal
+completes, Goal Policy observes the new frontier and proposes the next milestone,
+creating permanent progression without permanent task assignments.
 
 ## Rolling scheduling
 
@@ -254,20 +320,48 @@ Failures are classified by meaning:
 This avoids both replanning on network noise and retrying impossible work
 forever.
 
-## Manual control
+## Configuration and manual control
 
-`orchestration.json` is the opt-in crew assignment source. When present, the
-entrypoint validates its ordered Goals, resolves every resource and item, and
-starts the rolling orchestrator. Goal priority, bank thresholds, and resource codes must
-all be explicit; the Adapter supplies no defaults. The file remains ignored as
-account-specific runtime configuration.
+Today, `orchestration.json` is the opt-in crew assignment source. When present,
+the entrypoint validates its ordered explicit Goals, resolves every resource and
+item, and starts the rolling orchestrator. Goal priority, bank thresholds, and
+resource codes must all be explicit; the Adapter supplies no defaults. The file
+remains ignored as account-specific runtime configuration.
+
+Its target responsibility is policy rather than per-character assignment. A
+validated `policy.goalRuleOrder` array will order named Goal Rules, while
+optional `overrides` will contain finite one-shot Goals. Reordering known rules
+must change strategic preference without a code change. Adding a new behavior
+still requires a new tested Goal Rule; JSON does not contain executable decision
+logic.
+
+Target shape:
+
+```json
+{
+  "policy": {
+    "goalRuleOrder": [
+      "equipmentUpgrade",
+      "combatProgression",
+      "professionProgression",
+      "gatheringProgression",
+      "bankReplenishment",
+      "bankSurplusProcessing"
+    ]
+  },
+  "overrides": []
+}
+```
+
+Weights and concurrency limits may be added after ordered rules are proven, but
+safety and correctness invariants remain outside configuration. Overrides take
+precedence, finish normally, and then return control to autonomous policy.
 
 When `orchestration.json` is absent, `tasks.json` remains the transitional human
 Adapter and keeps its existing hot-reload behavior. `TaskAssignment` belongs to
 the transitional `tasks/` model; `utils/taskAssignments.ts` only validates and
-loads its JSON representation. The target is autonomous assignment with a
-temporary one-shot human override that takes precedence and then returns
-control to the orchestrator.
+loads its JSON representation. The migration ends by making autonomous
+orchestration the default and removing this fallback.
 
 ## Persistence
 
@@ -278,6 +372,8 @@ policy Interface.
 
 ## Known structural debt
 
+- Autonomous Goal Policy and configurable Goal Rule ordering are documented but
+  not implemented; `orchestration.json` still contains explicit Goals.
 - `tasks/taskRunners.ts` still contains hidden orchestration and persistent
   profession goals.
 - `combat.ts` mixes pure safety calculations with combat execution.

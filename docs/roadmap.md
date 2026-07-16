@@ -7,7 +7,14 @@ live incidents.
 ## Current direction
 
 Replace long-running `autoHunt`/`autoFarm` tasks with a crew orchestrator that
-selects bounded Activities from a shared Crew Snapshot and persistent Goals.
+automatically proposes finite Goals and selects bounded Activities from shared
+Crew Snapshots and world knowledge.
+
+Permanent MMO progression comes from completing finite milestones and
+automatically proposing the next useful Goal, not from infinite Goals or
+manually selected Directives.
+Strategic Goal Rule order will be configurable in `orchestration.json`; safety
+and correctness invariants remain fixed in code.
 
 The migration must keep the current bot usable at every step. Transitional
 tasks remain until their policy and execution behavior have moved behind the
@@ -96,28 +103,64 @@ new orchestration Interface.
 - [x] Retry failed Crew Snapshot refreshes before replanning.
 - [x] Wire the coordinator to Character Agents and the Artifacts client.
 
-### 4. Extract existing automatic decisions
+### 4. Autonomous Goal policy
 
-- [ ] Move monster selection out of `runAutoHuntTask`.
-- [ ] Move resource selection out of `runAutoFarmTask`.
+- [x] Decide that Goals are finite milestones; do not add infinite Goals or
+      manually selected Directives.
+- [ ] Add explicit cached `WorldKnowledge` as pure policy input.
+- [ ] Define `GoalRule`, `GoalCandidate`, and `GoalProposal` plain-data types.
+- [ ] Implement `createGoalPolicy` with a `proposeGoals` façade.
+- [ ] Split policy into `discoverGoalCandidates`, `rankGoalCandidates`, and
+      `selectCompatibleGoals`.
+- [ ] Give generated Goals stable semantic IDs and prevent equivalent active
+      Goals from being proposed twice.
+- [ ] Keep safety, Reservations, resource protection, and prerequisites outside
+      configurable strategy order.
+- [ ] Add the first automatically generated finite progression Goal.
+- [ ] Preserve a blocked parent Goal while inserting its prerequisite Goal ahead
+      of it.
+
+### 5. Configurable strategy
+
+- [ ] Validate named Goal Rules in `orchestration.json`.
+- [ ] Configure Goal Rule priority as one ordered array without numeric priority
+      collisions.
+- [ ] Require every supported autonomous rule to be present exactly once unless
+      explicit disabling semantics are designed.
+- [ ] Keep one-shot override Goals above autonomous Goal Proposals.
+- [ ] Log the rule, reason, configured rank, and utility evidence for every
+      selected Goal Proposal.
+- [ ] Add utility weights only after deterministic rule ordering is proven.
+
+### 6. Extract existing automatic decisions
+
+- [ ] Move monster selection into a pure combat Goal Rule.
+- [ ] Move resource selection into a pure gathering Goal Rule.
 - [ ] Move profession Goals out of local task-runner Maps.
 - [ ] Move gear-upgrade decisions into orchestration.
-- [ ] Replace `autoHunt` and `autoFarm` with composed Activities.
+- [ ] Split farming and hunting super-Activities into short gathering/combat
+      chunks plus explicit inventory storage.
+- [ ] Replace `autoHunt` and `autoFarm` with automatically generated Goals and
+      composed Activities.
 - [ ] Remove `runForever` once no autonomous behavior depends on it.
 
-### 5. Assignment sources
+### 7. Assignment sources
 
 - [x] Validate explicit orchestration Goals and resource mappings.
 - [x] Resolve configured resources and items before runtime startup.
 - [x] Move assignment vocabulary out of `utils/`.
 - [x] Keep `tasks.json` as a human Adapter during migration.
-- [ ] Make the orchestrator the default assignment source once proven.
-- [ ] Support one-shot human overrides that return control after completion.
+- [ ] Change `orchestration.json` from explicit assignment input to Goal Policy
+      configuration plus optional one-shot overrides.
+- [ ] Make autonomous orchestration the default assignment source once proven.
+- [ ] Remove the `tasks.json` fallback, Task Supervisor, and `src/bot/tasks/`.
 
 ## Decision quality
 
 - [x] Support several simultaneous bank targets with explicit priority.
 - [x] Account for in-flight production before assigning duplicate work.
+- [ ] Rank Goal Candidates first by configured Goal Rule order, then by utility
+      and a deterministic tie-breaker.
 - [ ] Compare hunting and gathering with observed XP/time data.
 - [ ] Choose profession XP recipes from observed efficiency rather than only
       missing-material count and recipe level.

@@ -21,13 +21,44 @@ one orchestration decision without duplicating the game as local state.
 _Avoid_: Character cache, local game state
 
 **Goal**:
-A desired outcome that may persist across several activities, such as unlocking
-a profession level, equipping an upgrade, or replenishing a bank resource.
-_Avoid_: Activity, task
+A finite desired outcome with an observable completion condition that may
+persist across several activities, such as reaching a specific profession
+level, equipping an upgrade, or replenishing a bank resource to a threshold.
+Permanent MMO progression emerges by automatically proposing the next finite
+Goal after one completes; it is not represented as an infinite Goal or a
+manually selected Directive.
+_Avoid_: Activity, task, permanent mode
+
+**Goal Rule**:
+A named pure decision rule that discovers zero or more Goal Candidates from
+observed state and world knowledge, such as `equipmentUpgrade` or
+`combatProgression`. Rule order is strategic configuration; safety and
+correctness invariants are not Goal Rules and cannot be reordered.
+_Avoid_: Task type, Activity dispatcher
+
+**Goal Candidate**:
+A possible finite Goal discovered by a Goal Rule, together with its reason and
+optional utility evidence. It has not yet been selected or persisted.
+_Avoid_: Goal, Reservation
+
+**Goal Proposal**:
+A Goal Candidate selected by policy as compatible with current Goals,
+Reservations, characters, and shared resources. A proposal becomes a persistent
+Goal when accepted into orchestrator state.
+_Avoid_: Activity proposal, Reservation
+
+**Goal Policy**:
+The pure decision boundary built by `createGoalPolicy` and invoked as
+`proposeGoals`. It discovers Goal Candidates, applies configured strategic
+priority, ranks utility within each rule, and selects compatible Goal Candidates
+to produce Goal Proposals. It never performs Actions or plans Activity execution
+details.
+_Avoid_: Directive, task supervisor, Activity planner
 
 **Orchestrator**:
-The decision module that combines a crew snapshot with persistent goals and
-proposes bounded activities; it never performs game actions directly.
+The decision module that combines a crew snapshot, world knowledge, persistent
+Goals, Reservations, and Goal Policy. It proposes finite Goals and bounded
+Activities; it never performs game Actions directly.
 _Avoid_: Task runner, activity executor
 
 **Reservation**:

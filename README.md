@@ -49,7 +49,7 @@ are shared across characters and processes.
 ## Documentation
 
 - [`CONTEXT.md`](CONTEXT.md) — project vocabulary: Action, Activity, Goal,
-  Reservation, Blocker, and orchestration terms.
+  Goal Rule, Goal Candidate, Goal Proposal, Reservation, and Blocker.
 - [`docs/architecture.md`](docs/architecture.md) — module responsibilities,
   dependency direction, and the target orchestrator.
 - [`docs/roadmap.md`](docs/roadmap.md) — delivered foundations and ordered next
@@ -74,15 +74,20 @@ src/
 The target decision flow is:
 
 ```text
-CrewSnapshot + OrchestratorState
-              ↓
-proposed Activities + next OrchestratorState
+CrewSnapshot + WorldKnowledge + OrchestratorState + GoalPolicy
+                              ↓
+                   finite Goal Proposals
+                              ↓
+              proposed bounded Activities
 ```
 
-Each Activity runs one complete operational cycle. The orchestrator observes
-the crew again after completion and schedules new work only for idle
-characters. See [`docs/architecture.md`](docs/architecture.md) for the full
-model and migration plan.
+Goals are measurable milestones, not permanent modes. Autonomous progression
+comes from proposing the next Goal whenever capacity becomes available or a
+previous Goal completes. Activities execute bounded operational work before the
+orchestrator observes again. Current farming and hunting cycles remain
+transitional super-Activities and will be split into short work chunks plus
+explicit storage. See [`docs/architecture.md`](docs/architecture.md) for the
+full model and migration plan.
 
 ## Runtime assignments
 
@@ -110,6 +115,32 @@ has exactly one gather or hunt source, an eligible crew member acquires it.
 Eligible characters can craft intermediate or target items for one another;
 their output returns to the bank before the consumer continues. Ambiguous
 sources and insufficient crew profession levels remain blocked.
+
+The target `orchestration.json` is a strategy file rather than a replacement
+`tasks.json`. It will order named autonomous Goal Rules and accept optional
+finite one-shot overrides. The following target shape is documented now but is
+not yet accepted by the runtime schema:
+
+```json
+{
+  "policy": {
+    "goalRuleOrder": [
+      "equipmentUpgrade",
+      "combatProgression",
+      "professionProgression",
+      "gatheringProgression",
+      "bankReplenishment",
+      "bankSurplusProcessing"
+    ]
+  },
+  "overrides": []
+}
+```
+
+Rule order is configurable strategy. Safety, Reservations, prerequisite
+resolution, bank protection, and one-Activity-per-character constraints remain
+non-configurable invariants. Reordering rules changes priorities without a code
+change; adding new behavior still requires a tested Goal Rule.
 
 When `orchestration.json` is absent, `tasks.json` remains the transitional human
 Adapter. It is validated with Valibot and reloaded every 10 seconds without

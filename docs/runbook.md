@@ -40,7 +40,13 @@ LOG_LEVEL=info
 NODE_ENV=development
 ```
 
-Create runtime assignments from the template:
+The runtime currently supports two mutually exclusive configuration paths:
+
+1. `orchestration.json` starts the rolling orchestrator with its current ordered
+   explicit `goals` schema;
+2. when that file is absent, `tasks.json` starts the transitional Task Adapter.
+
+Create transitional task assignments from the template:
 
 ```bash
 cp tasks.example.json tasks.json
@@ -49,6 +55,12 @@ cp tasks.example.json tasks.json
 `tasks.json` is re-read every 10 seconds. A valid changed assignment aborts the
 old character task between cycles, waits for it to stop, then starts the new
 one. Invalid JSON is logged and the last-known-good assignments keep running.
+
+The target `orchestration.json` schema will configure autonomous Goal Rule order
+and optional one-shot overrides instead of permanent character assignments. The
+future `policy.goalRuleOrder` shape documented in the README and architecture
+is not accepted by the runtime yet. Safety, Reservation, prerequisite, and
+resource-exclusivity invariants will remain non-configurable.
 
 ## Validation commands
 
@@ -95,6 +107,10 @@ Normal logs identify:
 - banking and inventory recovery;
 - decision fallbacks and Blockers;
 - HTTP status, URL, and response body on client errors.
+
+Once autonomous Goal Policy is implemented, decision logs will also identify the
+originating Goal Rule, resulting Goal Proposal, selected Activity, configured
+rank, reason, and utility evidence.
 
 Avoid logging the Artifacts token or full Authorization header.
 
