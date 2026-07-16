@@ -262,6 +262,14 @@ runtime promises and cancellation handles remain outside orchestration state.
 Goal, avoids work already reserved, excludes busy characters, and otherwise
 proposes one `farmResource` Activity for the strongest eligible gatherer.
 
+`orchestration/combatProgression.ts` advances a finite combat-level Goal. It
+completes the Goal when the target level is observed, waits for authoritative
+Reservations, or selects the highest-level safe monster at or below the
+character level. Safety is evaluated at post-rest HP and monster code breaks
+equal-level ties deterministically. No safe target is a typed planning error for
+a future equipment-prerequisite rule. Until combat Activities are shortened, the
+selected `fightMonster` Activity still uses the transitional full hunting cycle.
+
 `orchestration/equipmentProgression.ts` advances an explicit character equipment
 Goal through one recursive recipe step at a time. It retrieves banked inputs,
 assigns an eligible gatherer or safe fighter for a uniquely sourced raw

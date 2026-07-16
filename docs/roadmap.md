@@ -136,7 +136,7 @@ new orchestration Interface.
 
 ### 6. Extract existing automatic decisions
 
-- [ ] Move monster selection into a pure combat Goal Rule.
+- [x] Move monster selection into pure combat planning.
 - [ ] Move resource selection into a pure gathering Goal Rule.
 - [ ] Move profession Goals out of local task-runner Maps.
 - [ ] Move gear-upgrade decisions into orchestration.
