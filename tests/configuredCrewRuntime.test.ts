@@ -13,14 +13,34 @@ type Item = components['schemas']['ItemSchema'];
 type Monster = components['schemas']['MonsterSchema'];
 type Resource = components['schemas']['ResourceSchema'];
 
+const goalRuleOrder = [
+  'equipmentUpgrade',
+  'combatProgression',
+  'professionProgression',
+  'gatheringProgression',
+  'bankReplenishment',
+  'bankSurplusProcessing',
+] as const;
+
 class TestRepositoryError extends Error {}
 
 const buildCharacter = (overrides: Partial<Character> = {}): Character => ({
   ...({} as Character),
+  attack_air: 0,
+  attack_earth: 10,
+  attack_fire: 0,
+  attack_water: 0,
+  critical_strike: 0,
+  hp: 100,
   inventory: [],
   level: 5,
+  max_hp: 100,
   mining_level: 5,
   name: 'Stan',
+  res_air: 0,
+  res_earth: 0,
+  res_fire: 0,
+  res_water: 0,
   weapon_slot: 'copper_dagger',
   ...overrides,
 });
@@ -31,6 +51,23 @@ const buildItem = (code: string): Item => ({
   level: 1,
   name: code,
   type: 'weapon',
+});
+
+const buildMonster = (): Monster => ({
+  ...({} as Monster),
+  attack_air: 0,
+  attack_earth: 1,
+  attack_fire: 0,
+  attack_water: 0,
+  code: 'yellow_slime',
+  critical_strike: 0,
+  hp: 10,
+  level: 2,
+  name: 'Yellow Slime',
+  res_air: 0,
+  res_earth: 0,
+  res_fire: 0,
+  res_water: 0,
 });
 
 const buildResource = (code: string, itemCode: string): Resource => ({
@@ -263,6 +300,41 @@ describe('createConfiguredCrewRuntime', () => {
     expect(runtime.getState()).toEqual({ goals: [], reservations: [] });
     expect(getMonsters).toHaveBeenCalledOnce();
     expect(stateRepository.load()._unsafeUnwrap()).toEqual({ goals: [] });
+  });
+
+  it('persists autonomous Goals before starting their Activities', async () => {
+    const repositoryError = new TestRepositoryError('save failed');
+    const save = vi.fn(() => err(repositoryError));
+    const fight = vi.fn();
+    const { client, getMonsters } = buildClient({ monsters: [buildMonster()] });
+
+    const result = await createConfiguredCrewRuntime(
+      { ...client, fight } as ArtifactsClient,
+      {
+        config: { goals: [], policy: { goalRuleOrder: [...goalRuleOrder] } },
+        reportError: vi.fn(),
+        stateRepository: { load: () => ok({ goals: [] }), save },
+        waitBeforeRetry: vi.fn(async () => undefined),
+      },
+    );
+    const runtime = result._unsafeUnwrap();
+
+    expect(runtime.start()._unsafeUnwrapErr()).toBe(repositoryError);
+    expect(save).toHaveBeenCalledWith({
+      goals: [
+        {
+          characterName: 'Stan',
+          id: 'reachCombatLevel:Stan:6',
+          origin: 'autonomous',
+          reason: 'Stan can progress from combat level 5 to 6',
+          rule: 'combatProgression',
+          targetLevel: 6,
+          type: 'reachCombatLevel',
+        },
+      ],
+    });
+    expect(getMonsters).toHaveBeenCalledOnce();
+    expect(fight).not.toHaveBeenCalled();
   });
 
   it('restores an explicitly persisted empty state without reading world knowledge', async () => {

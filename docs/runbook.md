@@ -42,8 +42,8 @@ NODE_ENV=development
 
 The runtime currently supports two mutually exclusive configuration paths:
 
-1. `orchestration.json` starts the rolling orchestrator with its current ordered
-   explicit `goals` schema and may also validate `policy.goalRuleOrder`;
+1. `orchestration.json` starts the rolling orchestrator with ordered explicit
+   `goals` and optional autonomous `policy.goalRuleOrder`;
 2. when that file is absent, `tasks.json` starts the transitional Task Adapter.
 
 Create transitional task assignments from the template:
@@ -56,11 +56,13 @@ cp tasks.example.json tasks.json
 old character task between cycles, waits for it to stop, then starts the new
 one. Invalid JSON is logged and the last-known-good assignments keep running.
 
-The migration schema accepts `policy.goalRuleOrder`, requiring every supported
-rule exactly once, but the current runtime still executes only explicit Goals.
-Autonomous Goal generation and optional one-shot overrides remain future steps.
-Safety, Reservation, prerequisite, and resource-exclusivity invariants remain
-non-configurable.
+When `policy.goalRuleOrder` is present, every supported rule is required exactly
+once. The runtime currently implements `combatProgression`: it proposes only
+when a safe monster exists, persists the accepted next-level Goal, and then
+starts combat. Other rules currently produce no candidates. Without `policy`,
+only explicit or restored Goals run. Optional one-shot overrides remain a future
+step. Safety, Reservation, prerequisite, and resource-exclusivity invariants
+remain non-configurable.
 
 ### Durable configured Goals
 

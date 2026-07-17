@@ -116,9 +116,13 @@ new orchestration Interface.
       `selectCompatibleGoals`.
 - [x] Give generated Goals stable semantic IDs and prevent equivalent active
       Goals from being proposed twice.
-- [ ] Keep safety, Reservations, resource protection, and prerequisites outside
+- [x] Keep safety, Reservations, resource protection, and prerequisites outside
       configurable strategy order.
 - [x] Add the first automatically generated finite progression Goal.
+- [x] Invoke Goal Policy from the rolling runtime and persist accepted Goals
+      before their Activities start.
+- [x] Replace a completed combat Goal from the same observed Snapshot so
+      autonomous progression does not become idle between levels.
 - [x] Preserve a blocked parent Goal while inserting its prerequisite Goal ahead
       of it.
 

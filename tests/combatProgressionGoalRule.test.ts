@@ -9,21 +9,54 @@ import type { GoalPolicyContext } from '../src/bot/orchestration/goalPolicy.js';
 import type { components } from '../src/client/schema.js';
 
 type Character = components['schemas']['CharacterSchema'];
+type Monster = components['schemas']['MonsterSchema'];
 
 const buildCharacter = (name: string, level: number): Character => ({
   ...({} as Character),
+  attack_air: 0,
+  attack_earth: 10,
+  attack_fire: 0,
+  attack_water: 0,
+  critical_strike: 0,
+  hp: 100,
   level,
+  max_hp: 100,
   name,
+  res_air: 0,
+  res_earth: 0,
+  res_fire: 0,
+  res_water: 0,
 });
 
-const buildContext = (characters: readonly Character[]): GoalPolicyContext => ({
+const buildMonster = (overrides: Partial<Monster> = {}): Monster => ({
+  ...({} as Monster),
+  attack_air: 0,
+  attack_earth: 1,
+  attack_fire: 0,
+  attack_water: 0,
+  code: 'yellow_slime',
+  critical_strike: 0,
+  hp: 10,
+  level: 2,
+  name: 'Yellow Slime',
+  res_air: 0,
+  res_earth: 0,
+  res_fire: 0,
+  res_water: 0,
+  ...overrides,
+});
+
+const buildContext = (
+  characters: readonly Character[],
+  monsters: readonly Monster[] = [buildMonster()],
+): GoalPolicyContext => ({
   snapshot: {
     bank: [],
     capturedAt: '2026-07-16T12:00:00.000Z',
     characters,
   } satisfies CrewSnapshot,
   state: { goals: [], reservations: [] },
-  world: { items: [], monsters: [], resources: [] },
+  world: { items: [], monsters, resources: [] },
 });
 
 describe('createReachCombatLevelGoalId', () => {
@@ -67,5 +100,18 @@ describe('proposeCombatProgressionGoals', () => {
 
   it('discovers no Goal for an empty crew', () => {
     expect(proposeCombatProgressionGoals(buildContext([]))).toEqual([]);
+  });
+
+  it('does not propose combat progression without a safe target', () => {
+    const character = buildCharacter('Stan', 5);
+    const unsafeMonster = buildMonster({
+      attack_earth: 100,
+      hp: 100,
+      level: 5,
+    });
+
+    expect(
+      proposeCombatProgressionGoals(buildContext([character], [unsafeMonster])),
+    ).toEqual([]);
   });
 });

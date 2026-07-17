@@ -1,3 +1,4 @@
+import { findBestCombatTarget } from './combatProgression.js';
 import type { GoalRule } from './goalPolicy.js';
 import type { ReachCombatLevelGoal } from './orchestratorState.js';
 
@@ -16,14 +17,20 @@ const createReachCombatLevelGoal = (
   type: 'reachCombatLevel',
 });
 
-/** Discovers the next finite combat-level milestone for every character. */
-export const proposeCombatProgressionGoals: GoalRule = ({ snapshot }) =>
-  snapshot.characters.map((character) => {
+/** Discovers the next safe finite combat-level milestone per character. */
+export const proposeCombatProgressionGoals: GoalRule = ({ snapshot, world }) =>
+  snapshot.characters.flatMap((character) => {
+    if (findBestCombatTarget(character, world.monsters) === undefined) {
+      return [];
+    }
+
     const targetLevel = character.level + 1;
 
-    return {
-      goal: createReachCombatLevelGoal(character.name, targetLevel),
-      reason: `${character.name} can progress from combat level ${character.level} to ${targetLevel}`,
-      utility: 1,
-    };
+    return [
+      {
+        goal: createReachCombatLevelGoal(character.name, targetLevel),
+        reason: `${character.name} can progress from combat level ${character.level} to ${targetLevel}`,
+        utility: 1,
+      },
+    ];
   });

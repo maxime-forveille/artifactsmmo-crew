@@ -232,6 +232,12 @@ prerequisite Goals immediately before their preserved parent, rejects missing
 parents, and treats an equivalent active Goal as an idempotent no-op. Existing
 Goal order and Reservations remain unchanged.
 
+`orchestration/orchestrator.ts` composes Goal Policy with Goal Activity planning.
+It proposes before planning so an empty state can start, then proposes once more
+after reconciliation so a completed finite Goal can be replaced immediately.
+Activities from the first pass act as temporary Reservations during the second.
+The resulting Goals are persisted before either pass's Activities launch.
+
 Goal Rules represent strategic opportunity families such as
 `equipmentUpgrade`, `combatProgression`, `professionProgression`,
 `gatheringProgression`, `bankReplenishment`, and `bankSurplusProcessing`. Their
@@ -261,9 +267,9 @@ oscillating on every snapshot.
 catalog page into deterministic code-sorted collections. The underlying client
 caches those static page reads for the process lifetime. Configured orchestration
 loads this knowledge once when active Goals exist and passes it explicitly to
-planning. Autonomous Goal Policy will consume the same input without allowing
-Goal Rules to fetch their own data. Recipes are embedded in items, and future market observations can extend
-this input without allowing Goal Rules to fetch their own data.
+planning and autonomous Goal Policy, without allowing Goal Rules to fetch their
+own data. Recipes are embedded in items, and future market observations can
+extend this input.
 
 `orchestration/crewSnapshot.ts` reads all characters and every bank page into a
 deterministic read-only value. The game has no atomic account-snapshot
@@ -370,10 +376,11 @@ defaults. The file
 remains ignored as account-specific runtime configuration.
 
 Its target responsibility is policy rather than per-character assignment. The
-migration schema now accepts a validated `policy.goalRuleOrder` alongside
-explicit `goals`. Every supported Goal Rule must appear exactly once when policy
-is present. The current runtime does not consume that order yet. Optional
-`overrides` will later contain finite one-shot Goals. Reordering known rules must
+migration schema accepts a validated `policy.goalRuleOrder` alongside explicit
+`goals`. Every supported Goal Rule must appear exactly once when policy is
+present. The runtime consumes that order; implemented rules generate autonomous
+Goals while unavailable rules produce no candidates. Optional `overrides` will
+later contain finite one-shot Goals. Reordering known rules must
 change strategic preference without a code change. Adding a new behavior still
 requires a new tested Goal Rule; JSON does not contain executable decision
 logic.
@@ -443,8 +450,8 @@ contain authorization data.
 
 ## Known structural debt
 
-- Goal Policy foundations and Goal Rule order validation exist, but the runtime
-  still executes explicit `orchestration.json` Goals instead of autonomous Goal
+- Only the `combatProgression` Goal Rule is live; equipment, profession,
+  gathering, bank-replenishment, and bank-surplus rules still produce no Goal
   Proposals.
 - `tasks/taskRunners.ts` still contains hidden orchestration and persistent
   profession goals.
