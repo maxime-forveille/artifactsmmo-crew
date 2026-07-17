@@ -55,6 +55,18 @@ const prerequisiteGoal: ActiveGoal = {
   type: 'replenishBankItem',
 };
 
+const monsterPrerequisiteGoal: ActiveGoal = {
+  id: 'replenishBankItem:slime_gel:10',
+  itemCode: 'slime_gel',
+  minimumBankQuantity: 10,
+  monsterCode: 'yellow_slime',
+  origin: 'prerequisite',
+  parentGoalId: configuredGoal.id,
+  reason: 'Acquire monster drops for the parent Goal',
+  rule: 'professionProgression',
+  type: 'replenishBankItem',
+};
+
 const professionGoal: ActiveGoal = {
   characterName: 'Stan',
   id: 'reachProfessionLevel:Stan:gearcrafting:5',
@@ -101,6 +113,7 @@ const buildState = (): DurableOrchestratorState => ({
     productionGoal,
     professionGoal,
     prerequisiteGoal,
+    monsterPrerequisiteGoal,
     configuredGoal,
     autonomousGoal,
     overrideGoal,

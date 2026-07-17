@@ -9,7 +9,7 @@ import type {
   FightMonsterActivity,
   WithdrawItemActivity,
 } from '../activities/activity.js';
-import { combatMargin, isSafeToFight } from '../combat.js';
+import { findBestSafeFighter } from '../combat.js';
 import { EQUIP_SLOT_BY_ITEM_TYPE, equippedItemInSlot } from '../gear.js';
 import { heldQuantity } from '../inventory.js';
 import { craftSkillLevel } from '../progression.js';
@@ -143,38 +143,6 @@ const reservedCharacterNames = (
 ): ReadonlySet<string> =>
   new Set(state.reservations.map((reservation) => reservation.characterName));
 
-const afterRest = (character: Character): Character => ({
-  ...character,
-  hp: character.max_hp,
-});
-
-const findBestFighter = (
-  snapshot: CrewSnapshot,
-  monster: Monster,
-  excludedCharacterNames: ReadonlySet<string> = new Set(),
-): Character | undefined =>
-  snapshot.characters
-    .filter(
-      (character) =>
-        !excludedCharacterNames.has(character.name) &&
-        isSafeToFight(afterRest(character), monster),
-    )
-    .reduce<Character | undefined>((best, character) => {
-      if (best === undefined) {
-        return character;
-      }
-
-      const marginDifference =
-        combatMargin(afterRest(character), monster) -
-        combatMargin(afterRest(best), monster);
-
-      if (marginDifference !== 0) {
-        return marginDifference > 0 ? character : best;
-      }
-
-      return character.name.localeCompare(best.name) < 0 ? character : best;
-    }, undefined);
-
 const acquisitionStepFor = (
   snapshot: CrewSnapshot,
   state: OrchestratorState,
@@ -226,14 +194,14 @@ const acquisitionStepFor = (
     return err(new InvalidEquipmentMaterialSourceError(itemCode, monster.code));
   }
 
-  const eligibleFighter = findBestFighter(snapshot, monster);
+  const eligibleFighter = findBestSafeFighter(snapshot.characters, monster);
 
   if (eligibleFighter === undefined) {
     return err(new NoSafeEquipmentMaterialFighterError(itemCode, monster.code));
   }
 
-  const fighter = findBestFighter(
-    snapshot,
+  const fighter = findBestSafeFighter(
+    snapshot.characters,
     monster,
     reservedCharacterNames(state),
   );

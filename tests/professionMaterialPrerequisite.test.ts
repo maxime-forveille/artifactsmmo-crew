@@ -156,6 +156,58 @@ describe('proposeProfessionMaterialPrerequisite', () => {
     ]);
   });
 
+  it('proposes a monster-backed prerequisite for one unambiguous drop source', () => {
+    expect(
+      proposeProfessionMaterialPrerequisite(
+        buildSnapshot(),
+        buildState(),
+        buildKnowledge({ monsters: [buildMonster()], resources: [] }),
+      ),
+    ).toEqual([
+      {
+        configuredRank: -1,
+        goal: {
+          id: 'replenishBankItem:copper_ore:2',
+          itemCode: 'copper_ore',
+          minimumBankQuantity: 2,
+          monsterCode: 'copper_golem',
+          type: 'replenishBankItem',
+        },
+        parentGoalId: professionGoal.id,
+        reason:
+          'Stan needs 2x copper_ore from copper_golem to craft training_blade for weaponcrafting XP',
+        rule: 'professionProgression',
+      },
+    ]);
+  });
+
+  it('ignores unrelated monsters while resolving one monster drop source', () => {
+    const unrelatedMonster = {
+      ...buildMonster(),
+      drops: [
+        { code: 'unrelated_drop', max_quantity: 1, min_quantity: 1, rate: 1 },
+      ],
+    };
+    const matchingMonster = {
+      ...buildMonster(),
+      code: 'slime_king',
+      drops: [
+        { code: 'copper_ore', max_quantity: 1, min_quantity: 1, rate: 1 },
+      ],
+    };
+
+    expect(
+      proposeProfessionMaterialPrerequisite(
+        buildSnapshot(),
+        buildState(),
+        buildKnowledge({
+          monsters: [unrelatedMonster, matchingMonster],
+          resources: [],
+        }),
+      )[0]?.goal,
+    ).toMatchObject({ monsterCode: 'slime_king' });
+  });
+
   it('uses held and unreserved bank stock to size the prerequisite', () => {
     const character = buildCharacter({
       inventory: [{ code: 'copper_ore', quantity: 1, slot: 0 }],

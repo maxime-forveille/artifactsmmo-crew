@@ -17,6 +17,7 @@ import type { WorldKnowledge } from './worldKnowledge.js';
 
 type Character = CrewSnapshot['characters'][number];
 type Item = WorldKnowledge['items'][number];
+type Monster = WorldKnowledge['monsters'][number];
 type Resource = WorldKnowledge['resources'][number];
 type SimpleItem = Readonly<components['schemas']['SimpleItemSchema']>;
 type RecipeItem = Item &
@@ -33,6 +34,14 @@ type GatherPrerequisite = Readonly<{
   resource: Resource;
 }>;
 
+type MonsterPrerequisite = Readonly<{
+  itemCode: string;
+  kind: 'monster';
+  missingQuantity: number;
+  monster: Monster;
+  recipe: RecipeItem;
+}>;
+
 type CraftPrerequisite = Readonly<{
   itemCode: string;
   kind: 'craft';
@@ -41,7 +50,10 @@ type CraftPrerequisite = Readonly<{
   recipe: RecipeItem;
 }>;
 
-type MaterialPrerequisite = CraftPrerequisite | GatherPrerequisite;
+type MaterialPrerequisite =
+  | CraftPrerequisite
+  | GatherPrerequisite
+  | MonsterPrerequisite;
 
 export const createReplenishBankItemGoalId = (
   itemCode: string,
@@ -110,6 +122,22 @@ const uniqueGatheringSource = (
 
   return resources.length === 1 && monsterSourceCount === 0
     ? resources[0]
+    : undefined;
+};
+
+const uniqueMonsterSource = (
+  knowledge: WorldKnowledge,
+  itemCode: string,
+): Monster | undefined => {
+  const resourceSourceCount = knowledge.resources.filter((resource) =>
+    resource.drops.some((drop) => drop.code === itemCode),
+  ).length;
+  const monsters = knowledge.monsters.filter((monster) =>
+    monster.drops.some((drop) => drop.code === itemCode),
+  );
+
+  return monsters.length === 1 && resourceSourceCount === 0
+    ? monsters[0]
     : undefined;
 };
 
@@ -193,6 +221,17 @@ const findMaterialPrerequisite = (
           resource,
         };
       }
+
+      const monster = uniqueMonsterSource(knowledge, material.code);
+      if (monster !== undefined) {
+        return {
+          itemCode: material.code,
+          kind: 'monster',
+          missingQuantity,
+          monster,
+          recipe,
+        };
+      }
     }
   }
 
@@ -202,12 +241,12 @@ const findMaterialPrerequisite = (
 const createReplenishmentGoal = (
   itemCode: string,
   minimumBankQuantity: number,
-  resourceCode: string,
+  source: Pick<ReplenishBankItemGoal, 'monsterCode' | 'resourceCode'>,
 ): ReplenishBankItemGoal => ({
   id: createReplenishBankItemGoalId(itemCode, minimumBankQuantity),
   itemCode,
   minimumBankQuantity,
-  resourceCode,
+  ...source,
   type: 'replenishBankItem',
 });
 
@@ -282,16 +321,32 @@ export const proposeProfessionMaterialPrerequisite = (
     ];
   }
 
+  if (prerequisite.kind === 'gather') {
+    return [
+      {
+        configuredRank: -1,
+        goal: createReplenishmentGoal(
+          prerequisite.itemCode,
+          prerequisite.missingQuantity,
+          { resourceCode: prerequisite.resource.code },
+        ),
+        parentGoalId: goal.id,
+        reason: `${goal.characterName} needs ${prerequisite.missingQuantity}x ${prerequisite.itemCode} from ${prerequisite.resource.code} to craft ${prerequisite.recipe.code} for ${goal.skill} XP`,
+        rule: 'professionProgression',
+      },
+    ];
+  }
+
   return [
     {
       configuredRank: -1,
       goal: createReplenishmentGoal(
         prerequisite.itemCode,
         prerequisite.missingQuantity,
-        prerequisite.resource.code,
+        { monsterCode: prerequisite.monster.code },
       ),
       parentGoalId: goal.id,
-      reason: `${goal.characterName} needs ${prerequisite.missingQuantity}x ${prerequisite.itemCode} from ${prerequisite.resource.code} to craft ${prerequisite.recipe.code} for ${goal.skill} XP`,
+      reason: `${goal.characterName} needs ${prerequisite.missingQuantity}x ${prerequisite.itemCode} from ${prerequisite.monster.code} to craft ${prerequisite.recipe.code} for ${goal.skill} XP`,
       rule: 'professionProgression',
     },
   ];

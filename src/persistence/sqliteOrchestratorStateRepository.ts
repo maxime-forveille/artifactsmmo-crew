@@ -64,6 +64,7 @@ const goalSchema = v.variant('type', [
     id: nonEmptyStringSchema,
     itemCode: nonEmptyStringSchema,
     minimumBankQuantity: positiveIntegerSchema,
+    monsterCode: v.optional(nonEmptyStringSchema),
     resourceCode: v.optional(nonEmptyStringSchema),
     type: v.literal('replenishBankItem'),
   }),

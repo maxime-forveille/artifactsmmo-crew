@@ -1,6 +1,7 @@
 import { okAsync, type ResultAsync } from 'neverthrow';
 
 import type { ArtifactsApiError } from '../client/index.js';
+import type { components } from '../client/schema.js';
 import { logger } from '../utils/logger.js';
 
 import type { CharacterAgent } from './runtime/characterAgent.js';
@@ -106,6 +107,45 @@ export const isSafeToFight = (
   character: CombatStats,
   monster: CombatStats,
 ): boolean => combatMargin(character, monster) >= SAFE_MARGIN;
+
+type Character = Readonly<components['schemas']['CharacterSchema']>;
+type Monster = Readonly<components['schemas']['MonsterSchema']>;
+
+const afterRest = (character: Character): Character => ({
+  ...character,
+  hp: character.max_hp,
+});
+
+/**
+ * Chooses the safest available fighter for one known monster. Combat margin is
+ * the primary ordering; character name makes equal margins deterministic.
+ */
+export const findBestSafeFighter = (
+  characters: readonly Character[],
+  monster: Monster,
+  excludedCharacterNames: ReadonlySet<string> = new Set(),
+): Character | undefined =>
+  characters
+    .filter(
+      (character) =>
+        !excludedCharacterNames.has(character.name) &&
+        isSafeToFight(afterRest(character), monster),
+    )
+    .reduce<Character | undefined>((best, character) => {
+      if (best === undefined) {
+        return character;
+      }
+
+      const marginDifference =
+        combatMargin(afterRest(character), monster) -
+        combatMargin(afterRest(best), monster);
+
+      if (marginDifference !== 0) {
+        return marginDifference > 0 ? character : best;
+      }
+
+      return character.name.localeCompare(best.name) < 0 ? character : best;
+    }, undefined);
 
 // Rest unless HP is strictly above this fraction of max HP. A fight can
 // deal up to roughly this same fraction in damage, so resting only when

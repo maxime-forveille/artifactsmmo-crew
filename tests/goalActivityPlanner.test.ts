@@ -4,6 +4,7 @@ import type { CrewSnapshot } from '../src/bot/orchestration/crewSnapshot.js';
 import {
   createGoalActivityPlanner,
   GoalItemNotResolvedError,
+  GoalMonsterNotResolvedError,
   GoalResourceNotResolvedError,
   resolveEquipmentKnowledge,
 } from '../src/bot/orchestration/goalActivityPlanner.js';
@@ -186,6 +187,52 @@ describe('createGoalActivityPlanner', () => {
         produces: [{ itemCode: 'copper_ore' }],
       },
     ]);
+  });
+
+  it('uses the monster resolved for a monster-backed replenishment Goal', () => {
+    const monsterGoal = {
+      ...copperGoal,
+      monsterCode: 'yellow_slime',
+      resourceCode: undefined,
+    };
+    const unrelatedMonster = {
+      ...buildMonster('unrelated_drop'),
+      code: 'chicken',
+    };
+    const planner = createGoalActivityPlanner(
+      buildKnowledge({
+        monsters: [unrelatedMonster, buildMonster('copper_ore')],
+      }),
+    );
+
+    expect(
+      planner(buildSnapshot(), buildState([monsterGoal]))._unsafeUnwrap(),
+    ).toMatchObject({
+      activities: [
+        {
+          activity: { monsterCode: 'yellow_slime', type: 'fightMonster' },
+          characterName: 'Stan',
+          goalId: 'goal-copper',
+          produces: [{ itemCode: 'copper_ore' }],
+        },
+      ],
+    });
+  });
+
+  it('returns a typed error when a configured monster source is unresolved', () => {
+    const monsterGoal = {
+      ...copperGoal,
+      monsterCode: 'missing_slime',
+      resourceCode: undefined,
+    };
+    const result = createGoalActivityPlanner(buildKnowledge())(
+      buildSnapshot(),
+      buildState([monsterGoal]),
+    );
+
+    expect(result._unsafeUnwrapErr()).toEqual(
+      new GoalMonsterNotResolvedError('goal-copper'),
+    );
   });
 
   it('skips a satisfied Goal and plans the next one from the same snapshot', () => {

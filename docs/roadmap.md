@@ -152,9 +152,10 @@ new orchestration Interface.
       gathering source into a durable bank-stock prerequisite.
 - [x] Turn one absent profession-recipe material that is itself craftable from
       held or banked inputs into a durable `produceItem` prerequisite.
-- [ ] Turn monster drops and insufficient gathering levels into one-layer
-      profession prerequisites, then remove equivalent local task-runner
-      decisions.
+- [x] Turn one absent profession-recipe material with a unique monster source
+      into a durable bank-stock prerequisite and safe combat Activity.
+- [ ] Turn insufficient gathering levels into one-layer profession prerequisites,
+      then remove equivalent local task-runner decisions.
 - [ ] Extend the first weapon-only equipment Goal Rule to the remaining combat
       slots.
 - [ ] Split farming and hunting super-Activities into short gathering/combat

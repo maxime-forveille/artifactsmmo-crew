@@ -17,6 +17,11 @@ import {
   planItemProduction,
   type ItemProductionError,
 } from './itemProduction.js';
+import {
+  planMonsterReplenishment,
+  type Monster,
+  type MonsterReplenishmentError,
+} from './monsterReplenishment.js';
 import type {
   ActivityAssignment,
   OrchestratorState,
@@ -53,6 +58,13 @@ export class GoalItemNotResolvedError extends Error {
   }
 }
 
+export class GoalMonsterNotResolvedError extends Error {
+  constructor(public readonly goalId: string) {
+    super(`No monster was resolved for Goal "${goalId}"`);
+    this.name = 'GoalMonsterNotResolvedError';
+  }
+}
+
 export class GoalResourceNotResolvedError extends Error {
   constructor(public readonly goalId: string) {
     super(`No resource was resolved for Goal "${goalId}"`);
@@ -64,8 +76,10 @@ export type GoalActivityPlannerError =
   | CombatProgressionError
   | EquipmentProgressionError
   | GoalItemNotResolvedError
+  | GoalMonsterNotResolvedError
   | GoalResourceNotResolvedError
   | ItemProductionError
+  | MonsterReplenishmentError
   | ProfessionCharacterNotFoundError
   | ResourceReplenishmentError;
 
@@ -115,6 +129,14 @@ const isCompletedGoalStillSatisfied = (
 
 const findUnique = <T>(values: readonly T[]): T | undefined =>
   values.length === 1 ? values[0] : undefined;
+
+const resolveMonster = (
+  knowledge: WorldKnowledge,
+  goal: ReplenishBankItemGoal,
+): Monster | undefined =>
+  goal.monsterCode === undefined
+    ? undefined
+    : knowledge.monsters.find((monster) => monster.code === goal.monsterCode);
 
 const resolveResource = (
   knowledge: WorldKnowledge,
@@ -280,6 +302,18 @@ export const createGoalActivityPlanner = (
                   })()
                 : goal.type === 'replenishBankItem'
                   ? (() => {
+                      const monster = resolveMonster(knowledge, goal);
+                      if (goal.monsterCode !== undefined) {
+                        return monster === undefined
+                          ? err(new GoalMonsterNotResolvedError(goal.id))
+                          : planMonsterReplenishment(
+                              snapshot,
+                              planningState,
+                              monster,
+                              state.reservations,
+                            );
+                      }
+
                       const resource = resolveResource(knowledge, goal);
                       return resource === undefined
                         ? err(new GoalResourceNotResolvedError(goal.id))
