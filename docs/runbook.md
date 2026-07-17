@@ -123,6 +123,7 @@ Additional checks:
 ```bash
 pnpm format:check
 pnpm test:coverage
+pnpm test:mutation:changed
 pnpm test:mutation:dry
 pnpm test:mutation
 ```
@@ -258,13 +259,28 @@ space to withdraw it or the profession level to craft its consumer.
 ## Mutation testing
 
 Stryker runs in-place because the current TypeScript native-preview package is
-incompatible with Stryker's sandbox tsconfig rewriting. It creates a backup
-under `.stryker-tmp` and restores source files when complete.
+incompatible with Stryker's sandbox tsconfig rewriting. The wrapper creates an
+independent temporary safety backup for every literal mutation target in
+addition to Stryker's `.stryker-tmp` backup, and restores it when the run exits.
 
 The Vitest runner creates one `stryker-setup-<worker>.js` file in the project
 root and can fail to remove every file when workers close concurrently. The
 package scripts use `scripts/runMutationTests.ts` to preserve concurrency while
 removing these runner artifacts after both successful and failed runs.
+
+Use `pnpm test:mutation:changed` after a source-and-test tranche stabilizes. It
+reads the diff from `HEAD`, mutates new source files in full, adds two context
+lines around changes to existing files, and combines every range into one
+Stryker process. A scope-specific incremental cache and concise reporter avoid
+loading historical results into the local report. When tests change without a
+source diff, provide the covered source explicitly:
+
+```bash
+pnpm test:mutation:changed --mutate src/path/to/source.ts
+```
+
+Use `pnpm test:mutation --mutate <source>` for an intentional whole-file audit
+and the untargeted `pnpm test:mutation` only when the full suite is justified.
 
 Do not interrupt mutation testing unless necessary. If interrupted, inspect
 `.stryker-tmp` and the Git diff before continuing. HTML reports are written to

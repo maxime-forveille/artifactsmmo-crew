@@ -219,9 +219,10 @@ pnpm lint:fix            # Apply safe lint fixes
 
 pnpm test                # Run the test suite once
 pnpm test:watch          # Run tests in watch mode
-pnpm test:coverage       # Generate coverage
-pnpm test:mutation:dry   # Validate Stryker configuration
-pnpm test:mutation       # Run incremental mutation testing
+pnpm test:coverage          # Generate coverage
+pnpm test:mutation:changed  # Mutate changed source ranges once
+pnpm test:mutation:dry      # Validate Stryker configuration
+pnpm test:mutation          # Run full incremental mutation testing
 
 pnpm generate:api-types  # Refresh generated OpenAPI declarations
 ```

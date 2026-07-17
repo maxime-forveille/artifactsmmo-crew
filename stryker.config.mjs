@@ -1,4 +1,5 @@
 export default {
+  clearTextReporter: { maxTestsToLog: 1, reportTests: false, skipFull: true },
   concurrency: '50%',
   // TypeScript 7's native-preview package doesn't expose the compiler API
   // Stryker uses to rewrite tsconfig files inside a sandbox. In-place mode

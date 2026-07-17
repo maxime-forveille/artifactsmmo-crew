@@ -110,9 +110,10 @@ Run checks appropriate to the changed scope:
 Tests must not make uncontrolled live network calls. Use MSW for HTTP behavior.
 Live checks require explicit need and must follow `docs/runbook.md`.
 
-Whenever tests are added, run scoped mutation testing for each source file
-whose behavior the new tests cover, using
-`pnpm test:mutation --mutate <source-file>`. Use the full mutation suite only
+Whenever tests are added, run mutation testing once after the tests stabilize.
+For normal source changes, use `pnpm test:mutation:changed`; it combines new
+files and changed-line ranges in one run. If only tests changed, pass each
+covered source explicitly with `--mutate`. Use whole-file or full mutation only
 when the changed scope justifies it.
 
 Mutation testing measures contract strength, not progress toward an artificial

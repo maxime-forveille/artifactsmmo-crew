@@ -23,6 +23,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:mutation": "tsx scripts/runMutationTests.ts",
+    "test:mutation:changed": "tsx scripts/runMutationTests.ts --changed",
     "test:mutation:dry": "tsx scripts/runMutationTests.ts --dryRunOnly",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit"
